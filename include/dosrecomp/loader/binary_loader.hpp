@@ -37,6 +37,13 @@ struct program_image {
     segmented_address entry_point{};
     segmented_address initial_stack{};
     std::vector<relocation> relocations;
+
+    /** Returns the entry index relative to @ref bytes, not the DOS logical address. */
+    [[nodiscard]] constexpr std::size_t entry_offset() const noexcept {
+        return format == executable_format::com
+            ? 0U
+            : static_cast<std::size_t>(entry_point.segment) * 16U + entry_point.offset;
+    }
 };
 
 /** A contextual explanation for an unreadable or malformed input binary. */
@@ -61,4 +68,3 @@ public:
 };
 
 } // namespace dosrecomp::loader
-

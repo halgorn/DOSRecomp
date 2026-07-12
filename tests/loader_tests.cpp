@@ -21,7 +21,8 @@ bool test_com() {
     const auto result = binary_loader::load_bytes({b(0xb8), b(0x00), b(0x4c), b(0xcd), b(0x21)});
     return expect(result.has_value(), "load valid COM") &&
            expect(result->bytes.size() == 5, "preserve COM bytes") &&
-           expect(result->entry_point.offset == 0x100, "assign COM origin");
+           expect(result->entry_point.offset == 0x100, "assign COM origin") &&
+           expect(result->entry_offset() == 0, "map COM origin to image offset");
 }
 
 bool test_mz_with_relocation() {
@@ -33,7 +34,8 @@ bool test_mz_with_relocation() {
     return expect(result.has_value(), "load valid MZ") &&
            expect(result->bytes.size() == 16, "strip MZ header") &&
            expect(result->relocations.size() == 1, "parse relocation") &&
-           expect(result->format == dosrecomp::loader::executable_format::mz, "identify MZ");
+           expect(result->format == dosrecomp::loader::executable_format::mz, "identify MZ") &&
+           expect(result->entry_offset() == 0, "map MZ entry to image offset");
 }
 
 bool test_reject_invalid_inputs() {
@@ -52,4 +54,3 @@ int main() {
     const bool passed = test_com() && test_mz_with_relocation() && test_reject_invalid_inputs();
     return passed ? EXIT_SUCCESS : EXIT_FAILURE;
 }
-
