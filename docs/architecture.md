@@ -24,3 +24,10 @@ The decoder is a separate, pure module. Its first CFG-oriented subset recognizes
 instruction boundaries for NOP, immediate MOV, INT, near CALL/JMP, short Jcc,
 LOOP-family branches, and near RET. Unsupported opcodes are returned as errors,
 so control-flow analysis can never continue based on a guessed boundary.
+
+## CFG
+
+The CFG builder follows reachable direct edges from an explicit load-module
+entry offset. It creates basic blocks at control-flow boundaries and reports a
+decoder failure or external branch target as an error. Indirect control flow,
+switch-table recovery, and function discovery depend on broader operand support.
