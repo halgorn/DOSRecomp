@@ -52,6 +52,29 @@ The objective is software preservation, reverse engineering, performance, and lo
 
 ---
 
+## Current status
+
+The project now has a C++23 build, a validated COM/MZ loader, a small inspection
+CLI, and automated loader regression tests. Decoding, analysis, DOS API
+translation, and native code generation are planned next; the current CLI does
+not yet emit an executable.
+
+### Build and test
+
+```bash
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+Inspect a DOS binary:
+
+```bash
+./build/dosrecomp program.exe --verbose
+```
+
+See [the architecture notes](docs/architecture.md) for the loader contract.
+
 ## Features
 
 * Static recompilation

@@ -1,0 +1,5 @@
+/.ai-runtime/
+/build/
+*.gcda
+*.gcno
+
