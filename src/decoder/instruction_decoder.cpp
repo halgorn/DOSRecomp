@@ -123,6 +123,14 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         }
         return instruction{extension == 6 ? instruction_kind::stack : instruction_kind::arithmetic, offset, *size, 0, 0};
     }
+    if (opcode == 0xf6 || opcode == 0xf7) {
+        if (offset + 1 >= code.size()) return truncated(offset);
+        const auto extension = (byte_at(code, offset + 1) >> 3U) & 0x07U;
+        const auto immediate_size = extension == 0 ? static_cast<std::uint8_t>(opcode == 0xf6 ? 1 : 2) : 0;
+        const auto size = modrm_size(code, offset + 1, immediate_size);
+        if (!size) return std::unexpected(size.error());
+        return instruction{extension == 0 ? instruction_kind::compare : instruction_kind::arithmetic, offset, *size, 0, 0};
+    }
     if (opcode == 0xcd) {
         if (code.size() - offset < 2) return truncated(offset);
         return instruction{instruction_kind::interrupt, offset, 2, 0, byte_at(code, offset + 1)};

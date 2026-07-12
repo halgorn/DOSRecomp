@@ -33,6 +33,7 @@ int main() {
     const auto moffs = instruction_decoder::decode_at({b(0xa1), b(0x34), b(0x12)}, 0);
     const auto sign_extend = instruction_decoder::decode_at({b(0x99)}, 0);
     const auto adjust = instruction_decoder::decode_at({b(0xd4), b(10)}, 0);
+    const auto test_group = instruction_decoder::decode_at({b(0xf7), b(0x06), b(0x34), b(0x12), b(0xff), b(0xff)}, 0);
     const bool passed = expect(move && move->size == 3 && move->kind == instruction_kind::move_immediate, "decode MOV immediate") &&
         expect(branch && branch->kind == instruction_kind::conditional_jump && branch->relative_target == -4, "decode conditional branch") &&
         expect(call && call->kind == instruction_kind::call && call->relative_target == 16, "decode relative call") &&
@@ -49,5 +50,6 @@ int main() {
         expect(translate && translate->kind == instruction_kind::move, "decode XLAT") &&
         expect(moffs && moffs->kind == instruction_kind::move && moffs->size == 3, "decode moffs move") &&
         expect(sign_extend && sign_extend->kind == instruction_kind::arithmetic, "decode CWD") &&
-        expect(adjust && adjust->kind == instruction_kind::arithmetic && adjust->size == 2, "decode AAM")) ? EXIT_SUCCESS : EXIT_FAILURE;
+        expect(adjust && adjust->kind == instruction_kind::arithmetic && adjust->size == 2, "decode AAM") &&
+        expect(test_group && test_group->kind == instruction_kind::compare && test_group->size == 6, "decode F7 test group")) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
