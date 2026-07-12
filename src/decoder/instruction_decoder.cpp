@@ -61,6 +61,15 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         if (code.size() - offset < 3) return truncated(offset);
         return instruction{instruction_kind::move_immediate, offset, 3, 0, 0};
     }
+    if (opcode == 0x04 || opcode == 0x05 || opcode == 0x0c || opcode == 0x0d || opcode == 0x14 || opcode == 0x15 ||
+        opcode == 0x1c || opcode == 0x1d || opcode == 0x24 || opcode == 0x25 || opcode == 0x2c || opcode == 0x2d ||
+        opcode == 0x34 || opcode == 0x35 || opcode == 0x3c || opcode == 0x3d || opcode == 0xa8 || opcode == 0xa9) {
+        const auto size = static_cast<std::uint8_t>((opcode & 0x01U) == 0 ? 2U : 3U);
+        if (code.size() - offset < size) return truncated(offset);
+        const auto kind = (opcode & 0xf8U) == 0x38U || opcode == 0xa8 || opcode == 0xa9
+            ? instruction_kind::compare : instruction_kind::arithmetic;
+        return instruction{kind, offset, size, 0, 0};
+    }
     if ((opcode >= 0x50 && opcode <= 0x5f) || opcode == 0x06 || opcode == 0x07 || opcode == 0x0e || opcode == 0x16 || opcode == 0x17 || opcode == 0x1e || opcode == 0x1f) {
         return instruction{instruction_kind::stack, offset, 1, 0, 0};
     }
