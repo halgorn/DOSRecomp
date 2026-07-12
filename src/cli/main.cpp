@@ -1,11 +1,12 @@
 #include "dosrecomp/loader/binary_loader.hpp"
+#include "dosrecomp/cfg/cfg_builder.hpp"
 
 #include <iostream>
 #include <string_view>
 
 namespace {
 void print_usage() {
-    std::cerr << "Usage: dosrecomp <input.com|input.exe> [--verbose]\n";
+    std::cerr << "Usage: dosrecomp <input.com|input.exe> [--verbose|--emit-cfg]\n";
 }
 }
 
@@ -14,8 +15,10 @@ int main(int argc, char* argv[]) {
         print_usage();
         return 2;
     }
-    const bool verbose = argc == 3 && std::string_view(argv[2]) == "--verbose";
-    if (argc == 3 && !verbose) {
+    const auto option = argc == 3 ? std::string_view(argv[2]) : std::string_view{};
+    const bool verbose = option == "--verbose";
+    const bool emit_cfg = option == "--emit-cfg";
+    if (argc == 3 && !verbose && !emit_cfg) {
         print_usage();
         return 2;
     }
@@ -30,6 +33,19 @@ int main(int argc, char* argv[]) {
                   << "\nload module bytes: " << image.bytes.size()
                   << "\nrelocations: " << image.relocations.size() << '\n';
     }
+    if (emit_cfg) {
+        const auto graph = dosrecomp::cfg::cfg_builder::build(result->bytes, result->entry_offset());
+        if (!graph) {
+            std::cerr << "dosrecomp: cannot build CFG: " << graph.error().message << '\n';
+            return 1;
+        }
+        std::cout << "digraph cfg {\n";
+        for (const auto& block : graph->blocks) {
+            std::cout << "  b" << block.start << " [label=\"0x" << std::hex << block.start << "\"];\n";
+            for (const auto successor : block.successors) std::cout << "  b" << block.start << " -> b" << successor << ";\n";
+        }
+        std::cout << "}\n";
+        return 0;
+    }
     std::cout << "Loaded successfully. Recompilation pipeline is not implemented yet.\n";
 }
-

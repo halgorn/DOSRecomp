@@ -73,6 +73,12 @@ Inspect a DOS binary:
 ./build/dosrecomp program.exe --verbose
 ```
 
+Emit the currently supported direct-control-flow graph as GraphViz DOT:
+
+```bash
+./build/dosrecomp program.exe --emit-cfg > program.dot
+```
+
 See [the architecture notes](docs/architecture.md) for the loader contract.
 
 ## Features
