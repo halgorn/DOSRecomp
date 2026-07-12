@@ -30,6 +30,7 @@ int main() {
     const auto far_return = instruction_decoder::decode_at({b(0xcb)}, 0);
     const auto exchange = instruction_decoder::decode_at({b(0x93)}, 0);
     const auto translate = instruction_decoder::decode_at({b(0xd7)}, 0);
+    const auto moffs = instruction_decoder::decode_at({b(0xa1), b(0x34), b(0x12)}, 0);
     const bool passed = expect(move && move->size == 3 && move->kind == instruction_kind::move_immediate, "decode MOV immediate") &&
         expect(branch && branch->kind == instruction_kind::conditional_jump && branch->relative_target == -4, "decode conditional branch") &&
         expect(call && call->kind == instruction_kind::call && call->relative_target == 16, "decode relative call") &&
@@ -43,5 +44,6 @@ int main() {
         expect(interrupt3 && interrupt3->interrupt_number == 3, "decode INT 3") &&
         expect(far_return && far_return->kind == instruction_kind::return_, "decode far return") &&
         expect(exchange && exchange->kind == instruction_kind::move, "decode AX register exchange") &&
-        expect(translate && translate->kind == instruction_kind::move, "decode XLAT")) ? EXIT_SUCCESS : EXIT_FAILURE;
+        expect(translate && translate->kind == instruction_kind::move, "decode XLAT") &&
+        expect(moffs && moffs->kind == instruction_kind::move && moffs->size == 3, "decode moffs move")) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
