@@ -13,7 +13,9 @@
 namespace dosrecomp::decoder {
 
 /** The decoded operation categories currently needed for CFG recovery. */
-enum class instruction_kind { nop, move_immediate, interrupt, call, jump, conditional_jump, loop, return_ };
+enum class instruction_kind {
+    nop, move_immediate, move, arithmetic, compare, stack, interrupt, call, jump, conditional_jump, loop, return_
+};
 
 /** One instruction boundary and its optional relative target. */
 struct instruction {
@@ -31,7 +33,8 @@ struct decode_error { std::string message; };
  * Decodes a safe, CFG-oriented 8086 subset without executing it.
  *
  * Unknown instructions are rejected rather than assigned an invented length.
- * Full arithmetic and memory operand decoding is intentionally a later module.
+ * It recognizes common ModR/M instruction boundaries; operand semantics and
+ * the remaining 8086 encodings are intentionally a later module.
  */
 class instruction_decoder final {
 public:
@@ -40,4 +43,3 @@ public:
 };
 
 } // namespace dosrecomp::decoder
-

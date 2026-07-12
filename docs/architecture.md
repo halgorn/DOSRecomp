@@ -24,6 +24,8 @@ The decoder is a separate, pure module. Its first CFG-oriented subset recognizes
 instruction boundaries for NOP, immediate MOV, INT, near CALL/JMP, short Jcc,
 LOOP-family branches, and near RET. Unsupported opcodes are returned as errors,
 so control-flow analysis can never continue based on a guessed boundary.
+It also determines boundaries for common arithmetic, data-movement, stack, and
+immediate ModR/M encodings, including 16-bit addressing displacements.
 
 ## CFG
 
