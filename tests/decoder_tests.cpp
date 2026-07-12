@@ -25,6 +25,7 @@ int main() {
     const auto accumulator = instruction_decoder::decode_at({b(0x3d), b(0x00), b(0x00)}, 0);
     const auto flag = instruction_decoder::decode_at({b(0xfd)}, 0);
     const auto string = instruction_decoder::decode_at({b(0xa5)}, 0);
+    const auto io = instruction_decoder::decode_at({b(0xe6), b(0x20)}, 0);
     const bool passed = expect(move && move->size == 3 && move->kind == instruction_kind::move_immediate, "decode MOV immediate") &&
         expect(branch && branch->kind == instruction_kind::conditional_jump && branch->relative_target == -4, "decode conditional branch") &&
         expect(call && call->kind == instruction_kind::call && call->relative_target == 16, "decode relative call") &&
@@ -33,5 +34,6 @@ int main() {
         expect(arithmetic && arithmetic->kind == instruction_kind::arithmetic && arithmetic->size == 4, "decode arithmetic immediate") &&
         expect(accumulator && accumulator->kind == instruction_kind::compare && accumulator->size == 3, "decode accumulator immediate") &&
         expect(flag && flag->kind == instruction_kind::flags, "decode flag control") &&
-        expect(string && string->kind == instruction_kind::string, "decode string instruction")) ? EXIT_SUCCESS : EXIT_FAILURE;
+        expect(string && string->kind == instruction_kind::string, "decode string instruction") &&
+        expect(io && io->kind == instruction_kind::io && io->size == 2, "decode port I/O")) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -14,7 +14,7 @@ namespace dosrecomp::decoder {
 
 /** The decoded operation categories currently needed for CFG recovery. */
 enum class instruction_kind {
-    nop, move_immediate, move, arithmetic, compare, stack, flags, string, interrupt, call, jump, conditional_jump, loop, return_
+    nop, move_immediate, move, arithmetic, compare, stack, flags, string, io, interrupt, call, jump, conditional_jump, loop, return_
 };
 
 /** One instruction boundary and its optional relative target. */

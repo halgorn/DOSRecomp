@@ -59,6 +59,11 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
     if ((opcode >= 0xa4 && opcode <= 0xa7) || (opcode >= 0xaa && opcode <= 0xaf)) {
         return instruction{instruction_kind::string, offset, 1, 0, 0};
     }
+    if (opcode == 0xe4 || opcode == 0xe5 || opcode == 0xe6 || opcode == 0xe7) {
+        if (code.size() - offset < 2) return truncated(offset);
+        return instruction{instruction_kind::io, offset, 2, 0, 0};
+    }
+    if (opcode >= 0xec && opcode <= 0xef) return instruction{instruction_kind::io, offset, 1, 0, 0};
     if (opcode >= 0xb0 && opcode <= 0xb7) {
         if (code.size() - offset < 2) return truncated(offset);
         return instruction{instruction_kind::move_immediate, offset, 2, 0, 0};
