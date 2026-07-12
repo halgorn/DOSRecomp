@@ -79,6 +79,12 @@ Emit the currently supported direct-control-flow graph as GraphViz DOT:
 ./build/dosrecomp program.exe --emit-cfg > program.dot
 ```
 
+Inspect the target-independent control-flow IR:
+
+```bash
+./build/dosrecomp program.exe --emit-ir
+```
+
 See [the architecture notes](docs/architecture.md) for the loader contract.
 
 ## Features

@@ -37,7 +37,7 @@ target_link_libraries(dosrecomp_ir PUBLIC dosrecomp::cfg)
 target_compile_options(dosrecomp_ir PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 add_executable(dosrecomp src/cli/main.cpp)
-target_link_libraries(dosrecomp PRIVATE dosrecomp::loader dosrecomp::cfg)
+target_link_libraries(dosrecomp PRIVATE dosrecomp::loader dosrecomp::cfg dosrecomp::ir)
 target_compile_options(dosrecomp PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 if(DOSRECOMP_BUILD_TESTS)
