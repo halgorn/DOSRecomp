@@ -116,7 +116,10 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         if (code.size() - offset < 2) return truncated(offset);
         return instruction{instruction_kind::interrupt, offset, 2, 0, byte_at(code, offset + 1)};
     }
+    if (opcode == 0xcc) return instruction{instruction_kind::interrupt, offset, 1, 0, 3};
+    if (opcode == 0xce) return instruction{instruction_kind::interrupt, offset, 1, 0, 4};
     if (opcode == 0xc3) return instruction{instruction_kind::return_, offset, 1, 0, 0};
+    if (opcode == 0xcf) return instruction{instruction_kind::return_, offset, 1, 0, 0};
     if (opcode == 0xc2) {
         if (code.size() - offset < 3) return truncated(offset);
         return instruction{instruction_kind::return_, offset, 3, 0, 0};
