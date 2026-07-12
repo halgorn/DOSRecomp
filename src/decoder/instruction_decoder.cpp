@@ -131,6 +131,13 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         if (!size) return std::unexpected(size.error());
         return instruction{extension == 0 ? instruction_kind::compare : instruction_kind::arithmetic, offset, *size, 0, 0};
     }
+    if (opcode == 0xfe) {
+        const auto size = modrm_size(code, offset + 1, 0);
+        if (!size) return std::unexpected(size.error());
+        const auto extension = (byte_at(code, offset + 1) >> 3U) & 0x07U;
+        if (extension > 1) return std::unexpected(decode_error{"unsupported FE group extension"});
+        return instruction{instruction_kind::arithmetic, offset, *size, 0, 0};
+    }
     if (opcode == 0xcd) {
         if (code.size() - offset < 2) return truncated(offset);
         return instruction{instruction_kind::interrupt, offset, 2, 0, byte_at(code, offset + 1)};
