@@ -36,3 +36,11 @@ The CFG builder follows reachable direct edges from an explicit load-module
 entry offset. It creates basic blocks at control-flow boundaries and reports a
 decoder failure or external branch target as an error. Indirect control flow,
 switch-table recovery, and function discovery depend on broader operand support.
+
+## IR
+
+The IR module lowers validated CFG block starts into stable numeric IDs and
+explicit `stop`, `jump`, or `branch` terminators. It deliberately contains no
+machine-dependent operands; instruction-to-SSA lowering will add typed values
+and phi nodes above this verified control-flow foundation. The module depends
+only on CFG and rejects dangling or ambiguous successor relationships.
