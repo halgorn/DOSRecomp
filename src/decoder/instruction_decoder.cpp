@@ -54,6 +54,7 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
     };
     if (opcode == 0x90) return instruction{instruction_kind::nop, offset, 1, 0, 0};
     if (opcode >= 0x91 && opcode <= 0x97) return instruction{instruction_kind::move, offset, 1, 0, 0};
+    if (opcode == 0xd7) return instruction{instruction_kind::move, offset, 1, 0, 0};
     if (opcode == 0xf4 || opcode == 0xf5 || (opcode >= 0xf8 && opcode <= 0xfd)) {
         return instruction{instruction_kind::flags, offset, 1, 0, 0};
     }
