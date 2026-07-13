@@ -98,6 +98,10 @@ services remain separate additions.
 teletype output (`AH=0Eh`) through a host-independent terminal state. Video
 memory, modes, and palette services remain separate runtime additions.
 
+`INT 16h` provides deterministic keyboard read (`AH=00h`) and availability
+probe (`AH=01h`) over a caller-owned queue, keeping platform input policy out
+of translated program semantics.
+
 `virtual_drive` maps one absolute DOS drive into an explicit host root. It is a
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
 rejected before a filesystem operation is attempted.
