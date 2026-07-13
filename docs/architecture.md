@@ -139,6 +139,10 @@ rewriting them. Direct constant definitions are preserved and phi values fold
 only when every incoming value is the same known 16-bit constant; malformed or
 forward SSA references are rejected.
 
+Dead-value analysis starts at explicit observable roots and marks their SSA
+dependencies live. It validates dense IDs and input bounds, producing a
+non-mutating liveness mask for a later IR rewrite pass.
+
 ## Plugins
 
 The plugin registry defines typed extension points for instruction decoders,
