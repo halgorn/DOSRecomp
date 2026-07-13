@@ -177,6 +177,38 @@ int main() {
         std::cerr << "failed to translate DEC DX\n";
         return EXIT_FAILURE;
     }
+    const std::vector<std::byte> byte_alu_code{b(0x04), b(0x05)};
+    const auto byte_alu_decoded = dosrecomp::decoder::instruction_decoder::decode_at(byte_alu_code, 0);
+    if (!byte_alu_decoded || byte_alu_decoded->kind != dosrecomp::decoder::instruction_kind::arithmetic ||
+        byte_alu_decoded->operands[0].reg != dosrecomp::decoder::register_name::al ||
+        byte_alu_decoded->operands[0].width != dosrecomp::decoder::operand_width::byte ||
+        byte_alu_decoded->operands[1].immediate != 5 ||
+        byte_alu_decoded->alu != dosrecomp::decoder::alu_operation::add) {
+        std::cerr << "failed to decode ADD AL, 5\n";
+        return EXIT_FAILURE;
+    }
+    dosrecomp::ir::register_ssa_builder byte_alu_builder;
+    auto byte_alu_state = byte_alu_builder.entry_state();
+    const auto byte_alu_effect = dosrecomp::semantics::instruction_translator::translate(byte_alu_code, *byte_alu_decoded, byte_alu_builder, byte_alu_state);
+    if (!byte_alu_effect || byte_alu_effect->destination != dosrecomp::ir::register_id::al ||
+        byte_alu_builder.values()[byte_alu_effect->ssa_value].operation != dosrecomp::ir::operation_kind::add) {
+        std::cerr << "failed to translate ADD AL, 5\n";
+        return EXIT_FAILURE;
+    }
+    const std::vector<std::byte> byte_cmp_code{b(0x3c), b(0x07)};
+    const auto byte_cmp_decoded = dosrecomp::decoder::instruction_decoder::decode_at(byte_cmp_code, 0);
+    if (!byte_cmp_decoded || byte_cmp_decoded->kind != dosrecomp::decoder::instruction_kind::compare ||
+        byte_cmp_decoded->operands[0].reg != dosrecomp::decoder::register_name::al ||
+        byte_cmp_decoded->alu != dosrecomp::decoder::alu_operation::compare) {
+        std::cerr << "failed to decode CMP AL, 7\n";
+        return EXIT_FAILURE;
+    }
+    const auto byte_cmp_effect = dosrecomp::semantics::instruction_translator::translate(byte_cmp_code, *byte_cmp_decoded, byte_alu_builder, byte_alu_state);
+    if (!byte_cmp_effect || byte_cmp_effect->destination != dosrecomp::ir::register_id::flags ||
+        byte_alu_builder.values()[byte_cmp_effect->ssa_value].operation != dosrecomp::ir::operation_kind::compare) {
+        std::cerr << "failed to translate CMP AL, 7\n";
+        return EXIT_FAILURE;
+    }
 
     dosrecomp::runtime::real_mode_memory stack_memory;
     dosrecomp::decoder::register_values stack_registers{};

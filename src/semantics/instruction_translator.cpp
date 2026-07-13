@@ -92,9 +92,9 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
         return std::unexpected(translation_error{"decoded instruction exceeds source bytes"});
     }
     if ((instruction.kind == decoder::instruction_kind::arithmetic || instruction.kind == decoder::instruction_kind::compare) && instruction.operand_count == 2 &&
-        instruction.operands[0].kind == decoder::operand_kind::reg && instruction.operands[0].width == decoder::operand_width::word &&
+        instruction.operands[0].kind == decoder::operand_kind::reg &&
         (instruction.operands[1].kind == decoder::operand_kind::immediate || instruction.operands[1].kind == decoder::operand_kind::reg) &&
-        instruction.operands[1].width == decoder::operand_width::word) {
+        instruction.operands[0].width == instruction.operands[1].width) {
         const auto destination = register_for(instruction.operands[0].reg);
         const auto operation = operation_for(instruction.alu);
         if (!destination || !operation) return std::unexpected(translation_error{"arithmetic instruction semantics are not implemented"});
@@ -104,7 +104,7 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
             source_value = ssa.constant(*destination, instruction.operands[1].immediate);
         } else {
             const auto source = register_for(instruction.operands[1].reg);
-            if (!source) return std::unexpected(translation_error{"arithmetic source register is not an SSA word register"});
+            if (!source) return std::unexpected(translation_error{"arithmetic source register is not an SSA register"});
             source_value = state.values[static_cast<std::size_t>(*source)];
         }
         const auto result_register = (*operation == ir::operation_kind::compare || *operation == ir::operation_kind::test)
