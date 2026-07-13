@@ -138,6 +138,9 @@ the drive.
 virtual-drive directory exists, keeping host paths out of program-visible
 state and rejecting traversal attempts.
 
+`int21_directory_dispatcher` maps DOS `3Bh` and `47h` requests onto that
+sandboxed state without exposing any host path.
+
 `int21_file_dispatcher` maps DOS `3Ch`, `3Dh`, `3Eh`, `3Fh`, and `40h`
 requests directly to those virtual handles. Path decoding remains a caller
 responsibility, keeping the interrupt boundary independent of guest-memory
