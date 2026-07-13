@@ -65,3 +65,7 @@ function `02h` (character output), `09h` (bounded `$`-terminated string output),
 and `4Ch` (process exit) to observable process state. String pointers and
 terminators are checked before use. Filesystem, date/time, memory, and input
 services remain separate additions.
+
+`virtual_drive` maps one absolute DOS drive into an explicit host root. It is a
+lexical sandbox: other drives, relative paths, and `.`/`..` components are
+rejected before a filesystem operation is attempted.
