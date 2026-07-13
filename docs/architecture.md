@@ -57,3 +57,11 @@ decoded bytes. Its initial `MOV r16, imm16` implementation updates register SSA
 and preserves the literal immediate. Any other encoding produces a contextual
 error; this prevents accidental execution or invented program behavior while
 coverage grows.
+
+## Runtime
+
+The runtime is host-state-free at its API boundary. `INT 21h` currently maps
+function `02h` (character output), `09h` (bounded `$`-terminated string output),
+and `4Ch` (process exit) to observable process state. String pointers and
+terminators are checked before use. Filesystem, date/time, memory, and input
+services remain separate additions.
