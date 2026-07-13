@@ -1,5 +1,6 @@
 #include "dosrecomp/loader/binary_loader.hpp"
 #include "dosrecomp/cfg/cfg_builder.hpp"
+#include "dosrecomp/compiler/branching_compiler.hpp"
 #include "dosrecomp/compiler/cpp_backend.hpp"
 #include "dosrecomp/compiler/straight_line_compiler.hpp"
 #include "dosrecomp/ir/control_flow_ir.hpp"
@@ -98,13 +99,22 @@ int main(int argc, char* argv[]) {
         std::cerr << "dosrecomp: cannot infer an output path\n";
         return 1;
     }
-    const auto executable = dosrecomp::compiler::straight_line_compiler::compile(*result);
-    if (!executable) {
-        std::cerr << "dosrecomp: cannot compile: " << executable.error().message << '\n';
-        return 1;
+    auto executable = dosrecomp::compiler::branching_compiler::compile(*result);
+    std::vector<std::byte> executable_bytes;
+    bool got_executable = false;
+    if (executable) { executable_bytes = std::move(*executable); got_executable = true; }
+    else {
+        const auto fallback = dosrecomp::compiler::straight_line_compiler::compile(*result);
+        if (fallback) { executable_bytes = std::move(*fallback); got_executable = true; }
+        else {
+            std::cerr << "dosrecomp: cannot compile: " << executable.error().message << '\n';
+            return 1;
+        }
     }
+    (void)got_executable;
+    std::vector<std::byte>& bytes = executable_bytes;
     std::ofstream output(output_path, std::ios::binary | std::ios::trunc);
-    output.write(reinterpret_cast<const char*>(executable->data()), static_cast<std::streamsize>(executable->size()));
+    output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     if (!output) {
         std::cerr << "dosrecomp: cannot write '" << output_path.string() << "'\n";
         return 1;
