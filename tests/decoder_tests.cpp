@@ -42,7 +42,11 @@ int main() {
     const auto repeated_segment_string = instruction_decoder::decode_at({b(0xf3), b(0x26), b(0xa4)}, 0);
     const auto far_pointer_load = instruction_decoder::decode_at({b(0xc4), b(0x06), b(0x34), b(0x12)}, 0);
     const auto coprocessor = instruction_decoder::decode_at({b(0xd8), b(0x06), b(0x34), b(0x12)}, 0);
-    const bool passed = expect(move && move->size == 3 && move->kind == instruction_kind::move_immediate, "decode MOV immediate") &&
+    const auto byte_move = instruction_decoder::decode_at({b(0xb4), b(0x4c)}, 0);
+    const bool passed = expect(move && move->size == 3 && move->kind == instruction_kind::move_immediate && move->operand_count == 2 &&
+        move->operands[0].kind == operand_kind::reg && move->operands[0].reg == register_name::ax &&
+        move->operands[1].immediate == 0x1234, "decode MOV immediate operands") &&
+        expect(byte_move && byte_move->operands[0].reg == register_name::ah && byte_move->operands[1].immediate == 0x4c, "decode byte MOV operands") &&
         expect(branch && branch->kind == instruction_kind::conditional_jump && branch->relative_target == -4, "decode conditional branch") &&
         expect(call && call->kind == instruction_kind::call && call->relative_target == 16, "decode relative call") &&
         expect(!truncated, "reject truncated instruction") && expect(!unknown, "reject unknown opcode");

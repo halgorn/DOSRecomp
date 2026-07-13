@@ -1,17 +1,21 @@
 #include "dosrecomp/semantics/instruction_translator.hpp"
 
+#include <optional>
+
 namespace dosrecomp::semantics {
 namespace {
-[[nodiscard]] std::uint8_t byte_at(const std::vector<std::byte>& code, std::size_t offset) {
-    return std::to_integer<std::uint8_t>(code[offset]);
-}
-
-[[nodiscard]] ir::register_id register_for(std::uint8_t opcode) {
-    constexpr ir::register_id mapping[] = {
-        ir::register_id::ax, ir::register_id::cx, ir::register_id::dx, ir::register_id::bx,
-        ir::register_id::sp, ir::register_id::bp, ir::register_id::si, ir::register_id::di,
-    };
-    return mapping[opcode - 0xb8U];
+[[nodiscard]] std::optional<ir::register_id> register_for(decoder::register_name reg) {
+    switch (reg) {
+    case decoder::register_name::ax: return ir::register_id::ax;
+    case decoder::register_name::bx: return ir::register_id::bx;
+    case decoder::register_name::cx: return ir::register_id::cx;
+    case decoder::register_name::dx: return ir::register_id::dx;
+    case decoder::register_name::si: return ir::register_id::si;
+    case decoder::register_name::di: return ir::register_id::di;
+    case decoder::register_name::bp: return ir::register_id::bp;
+    case decoder::register_name::sp: return ir::register_id::sp;
+    default: return std::nullopt;
+    }
 }
 } // namespace
 
@@ -21,15 +25,17 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
     if (instruction.offset > code.size() || code.size() - instruction.offset < instruction.size) {
         return std::unexpected(translation_error{"decoded instruction exceeds source bytes"});
     }
-    const auto opcode = byte_at(code, instruction.offset);
-    if (instruction.kind != decoder::instruction_kind::move_immediate || opcode < 0xb8 || opcode > 0xbf || instruction.size != 3) {
+    if (instruction.kind != decoder::instruction_kind::move_immediate || instruction.operand_count != 2 ||
+        instruction.operands[0].kind != decoder::operand_kind::reg ||
+        instruction.operands[0].width != decoder::operand_width::word ||
+        instruction.operands[1].kind != decoder::operand_kind::immediate ||
+        instruction.operands[1].width != decoder::operand_width::word) {
         return std::unexpected(translation_error{"instruction semantics are not implemented"});
     }
-    const auto destination = register_for(opcode);
-    const auto immediate = static_cast<std::uint16_t>(
-        static_cast<std::uint16_t>(byte_at(code, instruction.offset + 1)) |
-        (static_cast<std::uint16_t>(byte_at(code, instruction.offset + 2)) << 8U));
-    return semantic_effect{destination, ssa.define_constant(state, destination, immediate), immediate};
+    const auto destination = register_for(instruction.operands[0].reg);
+    if (!destination) return std::unexpected(translation_error{"MOV destination is not an SSA word register"});
+    const auto immediate = instruction.operands[1].immediate;
+    return semantic_effect{*destination, ssa.define_constant(state, *destination, immediate), immediate};
 }
 
 } // namespace dosrecomp::semantics

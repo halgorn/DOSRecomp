@@ -44,6 +44,22 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
     return opcode == 0x26 || opcode == 0x2e || opcode == 0x36 || opcode == 0x3e ||
            opcode == 0xf0 || opcode == 0xf2 || opcode == 0xf3;
 }
+
+[[nodiscard]] register_name register_for(std::uint8_t encoding, operand_width width) {
+    constexpr std::array byte_registers{register_name::al, register_name::cl, register_name::dl, register_name::bl,
+                                        register_name::ah, register_name::ch, register_name::dh, register_name::bh};
+    constexpr std::array word_registers{register_name::ax, register_name::cx, register_name::dx, register_name::bx,
+                                        register_name::sp, register_name::bp, register_name::si, register_name::di};
+    return width == operand_width::byte ? byte_registers[encoding] : word_registers[encoding];
+}
+
+[[nodiscard]] instruction immediate_move(std::size_t offset, operand_width width, std::uint8_t encoding,
+                                         std::uint16_t immediate) {
+    const auto size = static_cast<std::uint8_t>(width == operand_width::byte ? 2 : 3);
+    return instruction{instruction_kind::move_immediate, offset, size, 0, 0,
+        {operand{operand_kind::reg, width, register_for(encoding, width), 0, 0},
+         operand{operand_kind::immediate, width, register_name::al, immediate, 0}}, 2};
+}
 } // namespace
 
 std::expected<instruction, decode_error>
@@ -107,11 +123,13 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
     if (opcode >= 0xec && opcode <= 0xef) return instruction{instruction_kind::io, offset, 1, 0, 0};
     if (opcode >= 0xb0 && opcode <= 0xb7) {
         if (code.size() - offset < 2) return truncated(offset);
-        return instruction{instruction_kind::move_immediate, offset, 2, 0, 0};
+        return immediate_move(offset, operand_width::byte, opcode - 0xb0U, byte_at(code, offset + 1));
     }
     if (opcode >= 0xb8 && opcode <= 0xbf) {
         if (code.size() - offset < 3) return truncated(offset);
-        return instruction{instruction_kind::move_immediate, offset, 3, 0, 0};
+        const auto immediate = static_cast<std::uint16_t>(byte_at(code, offset + 1)) |
+                               (static_cast<std::uint16_t>(byte_at(code, offset + 2)) << 8U);
+        return immediate_move(offset, operand_width::word, opcode - 0xb8U, immediate);
     }
     if (opcode == 0x04 || opcode == 0x05 || opcode == 0x0c || opcode == 0x0d || opcode == 0x14 || opcode == 0x15 ||
         opcode == 0x1c || opcode == 0x1d || opcode == 0x24 || opcode == 0x25 || opcode == 0x2c || opcode == 0x2d ||
