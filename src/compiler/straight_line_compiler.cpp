@@ -82,12 +82,16 @@ translate_block(const loader::program_image& image, const cfg::control_flow_grap
             if (decoded->interrupt_number != 0x21) {
                 return std::unexpected(straight_line_compile_error{"unsupported interrupt " + std::to_string(decoded->interrupt_number) + "h"});
             }
-            const auto ah_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::ax)];
-            const auto ah_value = static_cast<std::uint8_t>(resolve_exit_code(ts.ssa, ts.state, ah_ssa) >> 8U);
+            const auto ah_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::ah)];
+            const auto ah_constant = resolve_exit_code(ts.ssa, ts.state, ah_ssa);
+            const auto ax_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::ax)];
+            const auto ax_constant = resolve_exit_code(ts.ssa, ts.state, ax_ssa);
+            const auto ah_value = ah_constant != 0 || ah_ssa == ax_ssa ? static_cast<std::uint8_t>(ah_constant) : static_cast<std::uint8_t>(ax_constant >> 8U);
             if (ah_value == 0x4cU) {
-                const auto ax_value = resolve_exit_code(ts.ssa, ts.state, ah_ssa);
-                if ((ax_value >> 8U) != 0x4cU) return std::unexpected(straight_line_compile_error{"INT 21h must be invoked with AH=4Ch (exit)"});
-                return static_cast<std::uint8_t>(ax_value);
+                const auto al_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::al)];
+                const auto al_constant = resolve_exit_code(ts.ssa, ts.state, al_ssa);
+                if (al_constant != 0 || al_ssa == ax_ssa) return static_cast<std::uint8_t>(al_constant);
+                return static_cast<std::uint8_t>(ax_constant & 0xffU);
             }
             if (ah_value == 0x09U) {
                 const auto dx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::dx)];

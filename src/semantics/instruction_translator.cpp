@@ -20,6 +20,14 @@ namespace {
 }
 [[nodiscard]] std::optional<ir::register_id> register_for(decoder::register_name reg) {
     switch (reg) {
+    case decoder::register_name::al: return ir::register_id::al;
+    case decoder::register_name::cl: return ir::register_id::cl;
+    case decoder::register_name::dl: return ir::register_id::dl;
+    case decoder::register_name::bl: return ir::register_id::bl;
+    case decoder::register_name::ah: return ir::register_id::ah;
+    case decoder::register_name::ch: return ir::register_id::ch;
+    case decoder::register_name::dh: return ir::register_id::dh;
+    case decoder::register_name::bh: return ir::register_id::bh;
     case decoder::register_name::ax: return ir::register_id::ax;
     case decoder::register_name::bx: return ir::register_id::bx;
     case decoder::register_name::cx: return ir::register_id::cx;
@@ -33,6 +41,14 @@ namespace {
 }
 [[nodiscard]] std::uint16_t concrete_value(ir::register_id reg, const decoder::register_values& values) {
     switch (reg) {
+    case ir::register_id::al: return static_cast<std::uint16_t>(values[static_cast<std::size_t>(decoder::register_name::al)]);
+    case ir::register_id::cl: return static_cast<std::uint16_t>(values[static_cast<std::size_t>(decoder::register_name::cl)]);
+    case ir::register_id::dl: return static_cast<std::uint16_t>(values[static_cast<std::size_t>(decoder::register_name::dl)]);
+    case ir::register_id::bl: return static_cast<std::uint16_t>(values[static_cast<std::size_t>(decoder::register_name::bl)]);
+    case ir::register_id::ah: return static_cast<std::uint16_t>(values[static_cast<std::size_t>(decoder::register_name::ah)]);
+    case ir::register_id::ch: return static_cast<std::uint16_t>(values[static_cast<std::size_t>(decoder::register_name::ch)]);
+    case ir::register_id::dh: return static_cast<std::uint16_t>(values[static_cast<std::size_t>(decoder::register_name::dh)]);
+    case ir::register_id::bh: return static_cast<std::uint16_t>(values[static_cast<std::size_t>(decoder::register_name::bh)]);
     case ir::register_id::ax: return values[static_cast<std::size_t>(decoder::register_name::ax)];
     case ir::register_id::bx: return values[static_cast<std::size_t>(decoder::register_name::bx)];
     case ir::register_id::cx: return values[static_cast<std::size_t>(decoder::register_name::cx)];
@@ -46,6 +62,14 @@ namespace {
 }
 void store_concrete(ir::register_id reg, std::uint16_t value, decoder::register_values& values) {
     switch (reg) {
+    case ir::register_id::al: values[static_cast<std::size_t>(decoder::register_name::al)] = static_cast<std::uint8_t>(value); break;
+    case ir::register_id::cl: values[static_cast<std::size_t>(decoder::register_name::cl)] = static_cast<std::uint8_t>(value); break;
+    case ir::register_id::dl: values[static_cast<std::size_t>(decoder::register_name::dl)] = static_cast<std::uint8_t>(value); break;
+    case ir::register_id::bl: values[static_cast<std::size_t>(decoder::register_name::bl)] = static_cast<std::uint8_t>(value); break;
+    case ir::register_id::ah: values[static_cast<std::size_t>(decoder::register_name::ah)] = static_cast<std::uint8_t>(value); break;
+    case ir::register_id::ch: values[static_cast<std::size_t>(decoder::register_name::ch)] = static_cast<std::uint8_t>(value); break;
+    case ir::register_id::dh: values[static_cast<std::size_t>(decoder::register_name::dh)] = static_cast<std::uint8_t>(value); break;
+    case ir::register_id::bh: values[static_cast<std::size_t>(decoder::register_name::bh)] = static_cast<std::uint8_t>(value); break;
     case ir::register_id::ax: values[static_cast<std::size_t>(decoder::register_name::ax)] = value; break;
     case ir::register_id::bx: values[static_cast<std::size_t>(decoder::register_name::bx)] = value; break;
     case ir::register_id::cx: values[static_cast<std::size_t>(decoder::register_name::cx)] = value; break;
@@ -141,13 +165,13 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
         return semantic_effect{ir::register_id::sp, ssa.define_constant(state, ir::register_id::sp, new_sp), new_sp,
             memory_access{true, physical, decoder::operand_width::word}};
     }
-    if ((instruction.kind != decoder::instruction_kind::move_immediate && instruction.kind != decoder::instruction_kind::move) || instruction.operand_count != 2 ||
-        instruction.operands[0].width != decoder::operand_width::word ||
-        instruction.operands[1].width != decoder::operand_width::word) {
+    if ((instruction.kind != decoder::instruction_kind::move_immediate && instruction.kind != decoder::instruction_kind::move) || instruction.operand_count != 2) {
         return std::unexpected(translation_error{"instruction semantics are not implemented"});
     }
     const auto& destination_operand = instruction.operands[0];
     const auto& source_operand = instruction.operands[1];
+    const auto op_width = destination_operand.width;
+    const auto is_byte = op_width == decoder::operand_width::byte;
     if (destination_operand.kind == decoder::operand_kind::memory) {
         if (!registers || !memory) return std::unexpected(translation_error{"MOV memory write requires concrete register and memory state"});
         if (source_operand.kind != decoder::operand_kind::reg && source_operand.kind != decoder::operand_kind::immediate) {
@@ -160,35 +184,43 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
         if (source_operand.kind == decoder::operand_kind::immediate) value = source_operand.immediate;
         else {
             const auto source = register_for(source_operand.reg);
-            if (!source) return std::unexpected(translation_error{"MOV memory source is not an SSA word register"});
+            if (!source) return std::unexpected(translation_error{"MOV memory source is not an SSA register"});
             value = concrete_value(*source, *registers);
         }
-        const auto written = memory->write16(default_segment, *offset, value);
+        std::expected<void, runtime::memory_error> written;
+        if (is_byte) written = memory->write8(default_segment, *offset, static_cast<std::uint8_t>(value));
+        else written = memory->write16(default_segment, *offset, value);
         if (!written) return std::unexpected(translation_error{std::string{"cannot write MOV memory destination: "} + written.error().message});
         return semantic_effect{ir::register_id::count, ssa.define(state, ir::register_id::count, {}), std::nullopt,
-            memory_access{true, physical, decoder::operand_width::word}};
+            memory_access{true, physical, op_width}};
     }
     if (destination_operand.kind != decoder::operand_kind::reg) {
         return std::unexpected(translation_error{"MOV destination must be a register or memory"});
     }
     const auto destination = register_for(destination_operand.reg);
-    if (!destination) return std::unexpected(translation_error{"MOV destination is not an SSA word register"});
+    if (!destination) return std::unexpected(translation_error{"MOV destination is not an SSA register"});
     if (source_operand.kind == decoder::operand_kind::memory) {
         if (!registers || !memory) return std::unexpected(translation_error{"MOV memory read requires concrete register and memory state"});
         const auto offset = decoder::effective_address_resolver::resolve(source_operand, *registers);
         if (!offset) return std::unexpected(translation_error{"cannot resolve MOV memory source address"});
         const auto physical = static_cast<std::uint32_t>(default_segment) * 16U + *offset;
+        if (is_byte) {
+            const auto value = memory->read8(default_segment, *offset);
+            if (!value) return std::unexpected(translation_error{std::string{"cannot read MOV memory source: "} + value.error().message});
+            return semantic_effect{*destination, ssa.define_constant(state, *destination, *value), *value,
+                memory_access{false, physical, op_width}};
+        }
         const auto value = memory->read16(default_segment, *offset);
         if (!value) return std::unexpected(translation_error{std::string{"cannot read MOV memory source: "} + value.error().message});
         return semantic_effect{*destination, ssa.define_constant(state, *destination, *value), *value,
-            memory_access{false, physical, decoder::operand_width::word}};
+            memory_access{false, physical, op_width}};
     }
     if (source_operand.kind == decoder::operand_kind::immediate) {
         const auto immediate = source_operand.immediate;
         return semantic_effect{*destination, ssa.define_constant(state, *destination, immediate), immediate, std::nullopt};
     }
     const auto source = register_for(source_operand.reg);
-    if (!source) return std::unexpected(translation_error{"MOV source is not an SSA word register"});
+    if (!source) return std::unexpected(translation_error{"MOV source is not an SSA register"});
     const auto source_value = state.values[static_cast<std::size_t>(*source)];
     return semantic_effect{*destination, ssa.define(state, *destination, {source_value}), std::nullopt, std::nullopt};
 }

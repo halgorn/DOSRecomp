@@ -33,7 +33,7 @@ int main() {
     if (!effect || effect->destination != dosrecomp::ir::register_id::ax || effect->immediate != 0x1234 || !register_effect || register_effect->immediate || !add_effect || !compare_effect || !test_effect ||
         compare_effect->destination != dosrecomp::ir::register_id::flags || builder.values()[add_effect->ssa_value].operation != dosrecomp::ir::operation_kind::add ||
         builder.values()[compare_effect->ssa_value].operation != dosrecomp::ir::operation_kind::compare ||
-        builder.values()[test_effect->ssa_value].operation != dosrecomp::ir::operation_kind::test || builder.values().size() != 17) {
+        builder.values()[test_effect->ssa_value].operation != dosrecomp::ir::operation_kind::test || builder.values().size() != 25) {
         std::cerr << "failed to translate MOV AX, imm16\n";
         return EXIT_FAILURE;
     }

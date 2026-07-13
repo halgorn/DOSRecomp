@@ -46,6 +46,13 @@ int main() {
         std::cerr << "failed to evaluate constant conditional branch (JE taken via CMP AX,AX)\n";
         return EXIT_FAILURE;
     }
+    const auto byte_form = dosrecomp::loader::binary_loader::load_bytes({b(0xb4), b(0x4c), b(0xb0), b(9), b(0xcd), b(0x21)});
+    const auto byte_elf = byte_form ? dosrecomp::compiler::straight_line_compiler::compile(*byte_form) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"byte load failed"})};
+    const auto byte_code = byte_form ? dosrecomp::compiler::straight_line_compiler::extract_exit_code(*byte_form) : std::expected<std::uint8_t, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"byte code failed"})};
+    if (!byte_elf || !byte_code || *byte_code != 9) {
+        std::cerr << "failed straight-line byte-form exit (MOV AH,4Ch MOV AL,9)\n";
+        return EXIT_FAILURE;
+    }
     const auto non_exit = dosrecomp::loader::binary_loader::load_bytes({b(0x90)});
     const auto non_exit_elf = non_exit ? dosrecomp::compiler::straight_line_compiler::compile(*non_exit) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"non-exit load failed"})};
     if (non_exit_elf) {

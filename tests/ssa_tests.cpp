@@ -14,10 +14,10 @@ int main() {
     const auto merged = builder.merge(left, right);
     const auto phi = merged.values[static_cast<std::size_t>(register_id::ax)];
     const auto& values = builder.values();
-    if (values.size() != 13 || values[sum].kind != value_kind::operation || values[sum].operation != operation_kind::add ||
+    if (values.size() != 21 || values[sum].kind != value_kind::operation || values[sum].operation != operation_kind::add ||
         values[phi].kind != value_kind::phi ||
         values[phi].inputs != std::vector<std::size_t>{sum, right_ax} ||
-        merged.values[static_cast<std::size_t>(register_id::bx)] != 1) {
+        merged.values[static_cast<std::size_t>(register_id::bx)] != static_cast<std::size_t>(register_id::bx)) {
         std::cerr << "failed to construct register SSA phi\n";
         return EXIT_FAILURE;
     }

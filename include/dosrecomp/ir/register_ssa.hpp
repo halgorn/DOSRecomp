@@ -10,7 +10,10 @@
 namespace dosrecomp::ir {
 
 /** Registers modeled by the initial real-mode SSA layer. */
-enum class register_id : std::uint8_t { ax, bx, cx, dx, si, di, bp, sp, flags, count };
+enum class register_id : std::uint8_t {
+    al, cl, dl, bl, ah, ch, dh, bh,
+    ax, bx, cx, dx, si, di, bp, sp, flags, count
+};
 
 /** How an SSA value was introduced. */
 enum class value_kind : std::uint8_t { entry, definition, operation, phi };

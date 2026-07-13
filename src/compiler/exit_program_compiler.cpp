@@ -81,6 +81,29 @@ exit_program_compiler::extract_exit_code(const loader::program_image& image) {
     const auto entry_result = skip_nops(image.bytes, image.entry_offset());
     if (!entry_result) return std::unexpected(entry_result.error());
     const auto entry = *entry_result;
+    auto combine_byte_exit = [&]() -> std::expected<std::uint16_t, compile_error> {
+        std::uint8_t ah_value = 0;
+        std::uint8_t al_value = 0;
+        std::size_t cursor = entry;
+        bool saw_ah = false;
+        bool saw_al = false;
+        while (cursor < image.bytes.size()) {
+            const auto inst = decoder::instruction_decoder::decode_at(image.bytes, cursor);
+            if (!inst) return std::unexpected(compile_error{"cannot decode byte-form entry: " + inst.error().message});
+            if (inst->kind == decoder::instruction_kind::interrupt) break;
+            if (inst->kind != decoder::instruction_kind::move_immediate || inst->size != 2 ||
+                inst->operands[0].kind != decoder::operand_kind::reg || inst->operands[0].width != decoder::operand_width::byte) {
+                return std::unexpected(compile_error{"byte-form entry must be MOV AH, imm and MOV AL, imm"});
+            }
+            const auto imm = inst->operands[1].immediate & 0xffU;
+            if (inst->operands[0].reg == decoder::register_name::ah) { ah_value = static_cast<std::uint8_t>(imm); saw_ah = true; }
+            else if (inst->operands[0].reg == decoder::register_name::al) { al_value = static_cast<std::uint8_t>(imm); saw_al = true; }
+            else return std::unexpected(compile_error{"byte-form entry must use AH or AL"});
+            cursor += inst->size;
+        }
+        if (!saw_ah || !saw_al) return std::unexpected(compile_error{"byte-form entry must set both AH and AL"});
+        return static_cast<std::uint16_t>(ah_value << 8U | al_value);
+    };
     const auto move = decoder::instruction_decoder::decode_at(image.bytes, entry);
     if (!move) return std::unexpected(compile_error{"cannot decode entry instruction: " + move.error().message});
     ir::register_ssa_builder ssa;
@@ -90,6 +113,21 @@ exit_program_compiler::extract_exit_code(const loader::program_image& image) {
     const auto interrupt_offset = *interrupt_result;
     const auto effect = semantics::instruction_translator::translate(image.bytes, *move, ssa, state);
     if (effect) {
+        if (move->kind == decoder::instruction_kind::move_immediate && move->operands[0].width == decoder::operand_width::byte) {
+            const auto combined = combine_byte_exit();
+            if (!combined) return std::unexpected(combined.error());
+            auto exit_value = *combined;
+            auto final_interrupt = interrupt_offset;
+            if (!is_exit_interrupt(image.bytes, final_interrupt)) {
+                const auto following = skip_nops(image.bytes, final_interrupt + 2);
+                if (!following) return std::unexpected(following.error());
+                final_interrupt = *following;
+            }
+            if (!is_exit_interrupt(image.bytes, final_interrupt) || (exit_value >> 8U) != 0x4cU) {
+                return std::unexpected(compile_error{"entry sequence does not terminate through INT 21h exit"});
+            }
+            return static_cast<std::uint8_t>(exit_value);
+        }
         if (effect->destination != ir::register_id::ax || !effect->immediate) {
             return std::unexpected(compile_error{"INT 21h exit requires MOV AX, 4Cxxh"});
         }
@@ -120,23 +158,9 @@ exit_program_compiler::extract_exit_code(const loader::program_image& image) {
         return static_cast<std::uint8_t>(exit_value);
     }
 
-    const auto first_opcode = std::to_integer<std::uint8_t>(image.bytes[entry]);
-    if ((first_opcode != 0xb0 && first_opcode != 0xb4) || move->size != 2 || image.bytes.size() - entry < 2) {
-        return std::unexpected(compile_error{"cannot translate entry instruction: " + effect.error().message});
-    }
-    const auto first_immediate = std::to_integer<std::uint8_t>(image.bytes[entry + 1]);
-    const auto low_move = decoder::instruction_decoder::decode_at(image.bytes, interrupt_offset);
-    const auto byte_interrupt_result = low_move ? skip_nops(image.bytes, interrupt_offset + low_move->size)
-                                                : std::expected<std::size_t, compile_error>{std::unexpected(compile_error{"cannot decode MOV AL, immediate"})};
-    if (!low_move || low_move->size != 2 || interrupt_offset + 2 > image.bytes.size() ||
-        !byte_interrupt_result || !is_exit_interrupt(image.bytes, *byte_interrupt_result)) {
-        return std::unexpected(compile_error{"INT 21h exit requires two byte-register MOV instructions before the interrupt"});
-    }
-    const auto second_opcode = std::to_integer<std::uint8_t>(image.bytes[interrupt_offset]);
-    const auto second_immediate = std::to_integer<std::uint8_t>(image.bytes[interrupt_offset + 1]);
-    if (first_opcode == 0xb4 && first_immediate == 0x4c && second_opcode == 0xb0) return second_immediate;
-    if (first_opcode == 0xb0 && second_opcode == 0xb4 && second_immediate == 0x4c) return first_immediate;
-    return std::unexpected(compile_error{"INT 21h exit requires MOV AH, 4Ch and MOV AL, immediate"});
+    const auto combined = combine_byte_exit();
+    if (!combined) return std::unexpected(combined.error());
+    return static_cast<std::uint8_t>(*combined);
 }
 
 std::expected<std::vector<std::byte>, compile_error>
