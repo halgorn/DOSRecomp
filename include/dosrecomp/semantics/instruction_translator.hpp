@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <expected>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -15,7 +16,7 @@ namespace dosrecomp::semantics {
 struct semantic_effect {
     ir::register_id destination{};
     std::size_t ssa_value{};
-    std::uint16_t immediate{};
+    std::optional<std::uint16_t> immediate;
 };
 
 /** A semantically unsupported or inconsistent decoded instruction. */
@@ -30,4 +31,3 @@ public:
 };
 
 } // namespace dosrecomp::semantics
-

@@ -91,10 +91,10 @@ exit_program_compiler::extract_exit_code(const loader::program_image& image) {
     const auto effect = semantics::instruction_translator::translate(image.bytes, *move, ssa, state);
     if (effect) {
         if (!is_exit_interrupt(image.bytes, interrupt_offset)) return std::unexpected(compile_error{"entry sequence does not terminate through INT 21h"});
-        if (effect->destination != ir::register_id::ax || (effect->immediate >> 8U) != 0x4cU) {
+        if (effect->destination != ir::register_id::ax || !effect->immediate || (*effect->immediate >> 8U) != 0x4cU) {
             return std::unexpected(compile_error{"INT 21h exit requires MOV AX, 4Cxxh"});
         }
-        return static_cast<std::uint8_t>(effect->immediate);
+        return static_cast<std::uint8_t>(*effect->immediate);
     }
 
     const auto first_opcode = std::to_integer<std::uint8_t>(image.bytes[entry]);

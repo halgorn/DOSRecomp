@@ -98,7 +98,8 @@ register reads and writes without mutating historical values.
 The semantics module is the only layer permitted to assign machine meaning to
 decoded instructions. Its initial `MOV r16, imm16` implementation consumes the
 typed decoder operands, updates register SSA, and preserves the literal
-immediate. Any other encoding produces a contextual error; this prevents
+immediate. It also models `MOV r16, r16` as an SSA definition that depends on
+the source version rather than inventing a constant. Any other encoding produces a contextual error; this prevents
 accidental execution or invented program behavior while coverage grows.
 
 ## Runtime

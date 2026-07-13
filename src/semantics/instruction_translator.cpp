@@ -25,17 +25,25 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
     if (instruction.offset > code.size() || code.size() - instruction.offset < instruction.size) {
         return std::unexpected(translation_error{"decoded instruction exceeds source bytes"});
     }
-    if (instruction.kind != decoder::instruction_kind::move_immediate || instruction.operand_count != 2 ||
+    if ((instruction.kind != decoder::instruction_kind::move_immediate && instruction.kind != decoder::instruction_kind::move) || instruction.operand_count != 2 ||
         instruction.operands[0].kind != decoder::operand_kind::reg ||
         instruction.operands[0].width != decoder::operand_width::word ||
-        instruction.operands[1].kind != decoder::operand_kind::immediate ||
         instruction.operands[1].width != decoder::operand_width::word) {
         return std::unexpected(translation_error{"instruction semantics are not implemented"});
     }
     const auto destination = register_for(instruction.operands[0].reg);
     if (!destination) return std::unexpected(translation_error{"MOV destination is not an SSA word register"});
-    const auto immediate = instruction.operands[1].immediate;
-    return semantic_effect{*destination, ssa.define_constant(state, *destination, immediate), immediate};
+    if (instruction.operands[1].kind == decoder::operand_kind::immediate) {
+        const auto immediate = instruction.operands[1].immediate;
+        return semantic_effect{*destination, ssa.define_constant(state, *destination, immediate), immediate};
+    }
+    if (instruction.operands[1].kind != decoder::operand_kind::reg) {
+        return std::unexpected(translation_error{"MOV memory semantics are not implemented"});
+    }
+    const auto source = register_for(instruction.operands[1].reg);
+    if (!source) return std::unexpected(translation_error{"MOV source is not an SSA word register"});
+    const auto source_value = state.values[static_cast<std::size_t>(*source)];
+    return semantic_effect{*destination, ssa.define(state, *destination, {source_value}), std::nullopt};
 }
 
 } // namespace dosrecomp::semantics
