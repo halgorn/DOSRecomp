@@ -129,9 +129,10 @@ bounded reads, writes, and close operations. It starts handles at five,
 rejects invalid or mode-incompatible handles, and never resolves a path outside
 the drive.
 
-`int21_file_dispatcher` maps DOS `3Dh`, `3Fh`, and `3Eh` requests directly to
-those virtual handles. Path decoding remains a caller responsibility, keeping
-the interrupt boundary independent of guest-memory representation.
+`int21_file_dispatcher` maps DOS `3Ch`, `3Dh`, `3Eh`, `3Fh`, and `40h`
+requests directly to those virtual handles. Path decoding remains a caller
+responsibility, keeping the interrupt boundary independent of guest-memory
+representation.
 
 ## Optimizer
 
