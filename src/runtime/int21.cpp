@@ -23,5 +23,19 @@ int21_dispatcher::dispatch(const int21_request& request, const std::vector<std::
     return std::unexpected(dos_error{"unsupported INT 21h function"});
 }
 
-} // namespace dosrecomp::runtime
+std::expected<int21_memory_result, dos_error>
+int21_memory_dispatcher::dispatch(const int21_request& request, conventional_memory& memory) {
+    if (request.ah == 0x48) {
+        const auto segment = memory.allocate(request.bx);
+        if (!segment) return std::unexpected(dos_error{segment.error().message});
+        return int21_memory_result{.allocated_segment = *segment};
+    }
+    if (request.ah == 0x49) {
+        const auto released = memory.release(request.es);
+        if (!released) return std::unexpected(dos_error{released.error().message});
+        return int21_memory_result{};
+    }
+    return std::unexpected(dos_error{"unsupported INT 21h memory function"});
+}
 
+} // namespace dosrecomp::runtime

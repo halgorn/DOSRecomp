@@ -1,6 +1,8 @@
 /** @file int21.hpp @brief Safe host-side implementations of the initial DOS INT 21h services. */
 #pragma once
 
+#include "dosrecomp/runtime/conventional_memory.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -15,6 +17,8 @@ struct int21_request {
     std::uint8_t ah{};
     std::uint8_t al{};
     std::uint8_t dl{};
+    std::uint16_t bx{};
+    std::uint16_t es{};
     std::size_t string_offset{};
 };
 
@@ -34,5 +38,14 @@ public:
     dispatch(const int21_request& request, const std::vector<std::byte>& memory, dos_process_state& state);
 };
 
-} // namespace dosrecomp::runtime
+/** Result registers of the DOS conventional-memory services. */
+struct int21_memory_result { std::optional<std::uint16_t> allocated_segment; };
 
+/** Implements INT 21h allocation (`48h`) and release (`49h`) through conventional memory. */
+class int21_memory_dispatcher final {
+public:
+    [[nodiscard]] static std::expected<int21_memory_result, dos_error>
+    dispatch(const int21_request& request, conventional_memory& memory);
+};
+
+} // namespace dosrecomp::runtime

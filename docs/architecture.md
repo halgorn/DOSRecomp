@@ -110,6 +110,9 @@ before data is returned.
 in 16-byte paragraphs. It rejects zero or exhausted allocations, validates
 release ownership, and coalesces adjacent free blocks.
 
+`INT 21h` exposes that model through `AH=48h` allocation and `AH=49h` release,
+returning an allocated segment only after the request is validated.
+
 `virtual_drive` maps one absolute DOS drive into an explicit host root. It is a
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
 rejected before a filesystem operation is attempted.
