@@ -401,6 +401,7 @@ write_main(std::ostream& out, const loader::program_image& image) {
     out << "  regs[4] = 0xfffe;\n";
     if (image.format == loader::executable_format::mz) {
         const auto base = static_cast<std::uint32_t>(image.entry_point.segment) * 16U;
+        const auto seg = image.entry_point.segment;
         out << "  static const uint8_t img[] = {";
         for (std::size_t i = 0; i < image.bytes.size(); ++i) {
             if (i % 16 == 0) out << "\n    ";
@@ -409,6 +410,15 @@ write_main(std::ostream& out, const loader::program_image& image) {
         }
         out << "\n  };\n";
         out << "  for (size_t i = 0; i < sizeof(img); ++i) mem[" << std::hex << base << " + i] = img[i];\n" << std::dec;
+        for (const auto& reloc : image.relocations) {
+            const auto offset = static_cast<std::uint32_t>(reloc.address.segment) * 16U + reloc.address.offset + base;
+            out << "  {\n";
+            out << "    uint16_t cur = static_cast<uint16_t>(mem[" << std::hex << offset << "]) | (static_cast<uint16_t>(mem[" << offset + 1 << "]) << 8);\n" << std::dec;
+            out << "    cur = static_cast<uint16_t>(cur + " << seg << ");\n";
+            out << "    mem[" << std::hex << offset << "] = static_cast<uint8_t>(cur);\n" << std::dec;
+            out << "    mem[" << std::hex << offset + 1 << "] = static_cast<uint8_t>(cur >> 8);\n" << std::dec;
+            out << "  }\n";
+        }
         out << "  regs[10] = " << image.initial_stack.segment << ";\n";
         out << "  regs[4] = " << image.initial_stack.offset << ";\n";
     } else {

@@ -65,8 +65,7 @@ parse_mz(const std::vector<std::byte>& file) {
         }
         image.relocations.push_back(relocation{address});
     }
-    const std::size_t entry_offset = static_cast<std::size_t>(initial_cs) * 16U + initial_ip;
-    if (entry_offset >= image.bytes.size()) {
+    if (initial_ip >= image.bytes.size()) {
         return std::unexpected(load_error{"MZ entry point points outside the load module"});
     }
     return image;
