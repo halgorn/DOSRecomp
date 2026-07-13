@@ -49,3 +49,11 @@ only on CFG and rejects dangling or ambiguous successor relationships.
 immutable versions. It introduces entry values, definitions, and phi values at
 control-flow joins. Instruction semantics will use this builder to translate
 register reads and writes without mutating historical values.
+
+## Semantics
+
+The semantics module is the only layer permitted to assign machine meaning to
+decoded bytes. Its initial `MOV r16, imm16` implementation updates register SSA
+and preserves the literal immediate. Any other encoding produces a contextual
+error; this prevents accidental execution or invented program behavior while
+coverage grows.
