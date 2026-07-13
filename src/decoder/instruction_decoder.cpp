@@ -63,9 +63,28 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
 [[nodiscard]] operand register_operand(operand_width width, std::uint8_t encoding) {
     return operand{operand_kind::reg, width, register_for(encoding, width), 0, 0};
 }
-[[nodiscard]] operand rm_operand(operand_width width, std::uint8_t modrm) {
+[[nodiscard]] operand rm_operand(const std::vector<std::byte>& code, std::size_t offset, operand_width width, std::uint8_t modrm) {
     if ((modrm >> 6U) == 3) return register_operand(width, modrm & 7U);
-    return operand{operand_kind::memory, width, register_name::al, 0, modrm};
+    constexpr std::array<std::array<register_name, 2>, 8> addresses{{
+        {register_name::bx, register_name::si}, {register_name::bx, register_name::di},
+        {register_name::bp, register_name::si}, {register_name::bp, register_name::di},
+        {register_name::si, register_name::al}, {register_name::di, register_name::al},
+        {register_name::bp, register_name::al}, {register_name::bx, register_name::al}}};
+    const auto mode = modrm >> 6U;
+    const auto rm = modrm & 7U;
+    std::int16_t displacement = 0;
+    std::uint8_t count = rm <= 3 ? 2 : 1;
+    if (mode == 0 && rm == 6) {
+        displacement = static_cast<std::int16_t>(static_cast<std::uint16_t>(byte_at(code, offset + 1)) |
+                                                 (static_cast<std::uint16_t>(byte_at(code, offset + 2)) << 8U));
+        count = 0;
+    } else if (mode == 1) {
+        displacement = static_cast<std::int8_t>(byte_at(code, offset + 1));
+    } else if (mode == 2) {
+        displacement = static_cast<std::int16_t>(static_cast<std::uint16_t>(byte_at(code, offset + 1)) |
+                                                 (static_cast<std::uint16_t>(byte_at(code, offset + 2)) << 8U));
+    }
+    return operand{operand_kind::memory, width, register_name::al, 0, modrm, addresses[rm], count, displacement};
 }
 } // namespace
 
@@ -163,7 +182,7 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         const auto width = (opcode & 1U) == 0 ? operand_width::byte : operand_width::word;
         const auto modrm = byte_at(code, offset + 1);
         const auto reg = register_operand(width, (modrm >> 3U) & 7U);
-        const auto rm = rm_operand(width, modrm);
+        const auto rm = rm_operand(code, offset + 1, width, modrm);
         const auto destination = (opcode & 2U) == 0 ? rm : reg;
         const auto source = (opcode & 2U) == 0 ? reg : rm;
         return instruction{instruction_kind::move, offset, *size, 0, 0, {destination, source}, 2};

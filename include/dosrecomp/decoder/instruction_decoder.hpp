@@ -38,6 +38,9 @@ struct operand {
     register_name reg{register_name::al};
     std::uint16_t immediate{};
     std::uint8_t modrm{};
+    std::array<register_name, 2> address_registers{};
+    std::uint8_t address_register_count{};
+    std::int16_t displacement{};
 };
 
 /** One instruction boundary and its optional relative target. */
