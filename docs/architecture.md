@@ -94,6 +94,10 @@ and `4Ch` (process exit) to observable process state. String pointers and
 terminators are checked before use. Filesystem, date/time, memory, and input
 services remain separate additions.
 
+`INT 10h` currently provides text-mode cursor placement (`AH=02h`) and
+teletype output (`AH=0Eh`) through a host-independent terminal state. Video
+memory, modes, and palette services remain separate runtime additions.
+
 `virtual_drive` maps one absolute DOS drive into an explicit host root. It is a
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
 rejected before a filesystem operation is attempted.
