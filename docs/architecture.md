@@ -124,9 +124,10 @@ deterministic and testable.
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
 rejected before a filesystem operation is attempted.
 
-`virtual_file_system` layers DOS-style handles over that drive for safe
-read-only opening, bounded reads, and close operations. It starts handles at
-five, rejects invalid handles, and never resolves a path outside the drive.
+`virtual_file_system` layers DOS-style read/write handles over that drive for
+bounded reads, writes, and close operations. It starts handles at five,
+rejects invalid or mode-incompatible handles, and never resolves a path outside
+the drive.
 
 `int21_file_dispatcher` maps DOS `3Dh`, `3Fh`, and `3Eh` requests directly to
 those virtual handles. Path decoding remains a caller responsibility, keeping
