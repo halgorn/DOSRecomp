@@ -14,6 +14,9 @@ struct int10_request { std::uint8_t ah{}; std::uint8_t al{}; std::uint8_t dh{}; 
 struct text_video_state { std::string output; std::uint8_t row{}; std::uint8_t column{}; };
 struct video_error { std::string message; };
 
+enum class video_mode : std::uint8_t { text_80x25, mode13h };
+struct video_mode_state { video_mode active{video_mode::text_80x25}; };
+
 /** Implements teletype output and cursor positioning for text-mode programs. */
 class int10_dispatcher final {
 public:
@@ -21,5 +24,11 @@ public:
     dispatch(const int10_request& request, text_video_state& state);
 };
 
-} // namespace dosrecomp::runtime
+/** Implements BIOS set-video-mode (`AH=00h`) for text and Mode 13h states. */
+class int10_mode_dispatcher final {
+public:
+    [[nodiscard]] static std::expected<void, video_error>
+    dispatch(const int10_request& request, video_mode_state& state);
+};
 
+} // namespace dosrecomp::runtime
