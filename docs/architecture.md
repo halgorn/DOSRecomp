@@ -45,6 +45,11 @@ It records proven call sites and deliberately never promotes a jump target to a
 function. Indirect calls and shared-tail recovery remain unsupported pending
 complete operand decoding.
 
+Loop recovery identifies direct backward `JMP`, conditional-jump, and `LOOP`
+edges, reporting their header and latch offsets. It intentionally reports CFG
+facts rather than guessing whether a loop originated as `for`, `while`, or
+`do-while` source syntax.
+
 ## Backend
 
 The initial ELF backend emits a structurally valid ELF64/x86_64 image with one
