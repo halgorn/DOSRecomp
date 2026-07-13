@@ -128,6 +128,10 @@ rejected before a filesystem operation is attempted.
 read-only opening, bounded reads, and close operations. It starts handles at
 five, rejects invalid handles, and never resolves a path outside the drive.
 
+`int21_file_dispatcher` maps DOS `3Dh`, `3Fh`, and `3Eh` requests directly to
+those virtual handles. Path decoding remains a caller responsibility, keeping
+the interrupt boundary independent of guest-memory representation.
+
 ## Optimizer
 
 Constant propagation consumes immutable SSA values and computes facts without
