@@ -54,6 +54,9 @@ struct operand {
     bool direct_address{};
 };
 
+/** REP/REPZ/REPNZ prefix encoded on a string instruction. */
+enum class rep_prefix : std::uint8_t { none = 0, rep = 1, repe = 2, repne = 3 };
+
 /** One instruction boundary and its optional relative target. */
 struct instruction {
     instruction_kind kind{};
@@ -67,6 +70,7 @@ struct instruction {
     alu_operation alu{alu_operation::none};
     bool stack_pop{false};
     bool indirect{false};
+    rep_prefix rep{rep_prefix::none};
 };
 
 /** A malformed, truncated, or not-yet-supported instruction. */

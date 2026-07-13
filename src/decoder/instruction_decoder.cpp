@@ -165,6 +165,18 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
     if (opcode == 0x9e || opcode == 0x9f) return instruction{instruction_kind::flags, offset, 1, 0, 0};
     if (opcode == 0x9c || opcode == 0x9d || opcode == 0x0f) return instruction{instruction_kind::stack, offset, 1, 0, 0};
     if (opcode == 0x9b) return instruction{instruction_kind::nop, offset, 1, 0, 0};
+    if ((opcode == 0xf2 || opcode == 0xf3) && offset + 1 < code.size()) {
+        const auto next_op = byte_at(code, offset + 1);
+        const bool is_string = (next_op >= 0xa4 && next_op <= 0xa7) || (next_op >= 0xaa && next_op <= 0xaf);
+        if (is_string) {
+            const auto prefix = opcode == 0xf3
+                ? (next_op == 0xa6 || next_op == 0xa7 || next_op == 0xae || next_op == 0xaf
+                    ? rep_prefix::repe : rep_prefix::rep)
+                : rep_prefix::repne;
+            return instruction{instruction_kind::string, offset, 2, 0, 0, {}, 0,
+                branch_condition::always, alu_operation::none, false, false, prefix};
+        }
+    }
     if ((opcode >= 0xa4 && opcode <= 0xa7) || (opcode >= 0xaa && opcode <= 0xaf)) {
         return instruction{instruction_kind::string, offset, 1, 0, 0};
     }

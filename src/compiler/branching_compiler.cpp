@@ -68,16 +68,16 @@ constexpr std::size_t word_reg_index(decoder::register_name r) {
 
 void emit_runtime_header(std::ostream& out) {
     out << "#include <cstdint>\n#include <cstdio>\n#include <cstdlib>\n#include <ctime>\n#include <fcntl.h>\n"
-        "#include <sys/syscall.h>\n#include <unistd.h>\n\n"
+        "#include <sys/syscall.h>\n#include <unistd.h>\n"
         "static uint16_t regs[20] = {0}; static uint8_t mem[" << std::hex << dos_memory_size << std::dec << "] = {0};\n"
-        "static uint32_t flags = 0; static int next_fake_handle = 3;\n"
-        "static int handle_to_fd[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};\n"
-        "static uint16_t call_stack[256] = {0}; static int call_sp = 0;\n\n"
+        "static uint32_t flags = 0; static int next_fake_handle = 3;\nstatic int handle_to_fd[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};\n"
+        "static uint16_t call_stack[256] = {0}; static int call_sp = 0;\n"
         "static inline void update_flags_cmp(uint16_t a, uint16_t b, bool is_byte) {\n"
         "    if (is_byte) { uint8_t aa = static_cast<uint8_t>(a), bb = static_cast<uint8_t>(b), r = static_cast<uint8_t>(aa - bb);\n"
         "      flags = (aa == bb ? 0x40u : 0u) | ((r & 0x80) ? 0x80u : 0u) | (aa < bb ? 1u : 0u); }\n"
         "    else { uint16_t r = static_cast<uint16_t>(a - b);\n"
         "      flags = (a == b ? 0x40u : 0u) | ((r & 0x8000) ? 0x8000u : 0u) | (a < b ? 1u : 0u); }\n}\n"
+        "static inline __attribute__((always_inline)) int df_step(int d) { return (flags & 0x400u) ? -d : d; }\n"
         "static void dispatch(uint32_t target);\n";
 }
 
@@ -207,9 +207,9 @@ void emit_move(std::ostream& out, const decoder::instruction& decoded) {
     }
     if (src.kind == decoder::operand_kind::memory) {
         const auto addr = emit_mem_addr(src);
-        if (is_byte) out << "  " << byte_reg_store(dst.reg, "mem[" + addr + "]") << ";\n";
-        else { std::ostringstream v; v << "(static_cast<uint16_t>(mem[" << addr << "]) | (static_cast<uint16_t>(mem[" << addr << " + 1]) << 8))";
-               out << "  regs[" << word_reg_index(dst.reg) << "] = " << v.str() << ";\n"; } return;
+        if (is_byte) { out << "  " << byte_reg_store(dst.reg, "mem[" + addr + "]") << ";\n"; return; }
+        out << "  regs[" << word_reg_index(dst.reg) << "] = static_cast<uint16_t>(mem[" << addr << "]) | (static_cast<uint16_t>(mem["
+            << addr << " + 1]) << 8);\n"; return;
     }
     if (is_byte) out << "  " << byte_reg_store(dst.reg, byte_reg_access(src.reg)) << ";\n";
     else out << "  regs[" << word_reg_index(dst.reg) << "] = regs[" << word_reg_index(src.reg) << "];\n";
@@ -245,6 +245,43 @@ void emit_arithmetic(std::ostream& out, const decoder::instruction& decoded) {
     out << "  " << word_reg_access(dst.reg) << " " << op << " 0x"
         << std::hex << decoded.operands[1].immediate << std::dec << ";\n";
     out << "  update_flags_cmp(" << word_reg_access(dst.reg) << ", 0, false);\n";
+}
+
+void emit_string_op(std::ostream& out, const loader::program_image& image, const decoder::instruction& decoded) {
+    const auto op = std::to_integer<std::uint8_t>(image.bytes[decoded.offset + decoded.size - 1]);
+    const bool word = (op & 1U) != 0;
+    const int d = word ? 2 : 1;
+    const int base = op & 0xfeU;
+    const bool has_rep = decoded.rep != decoder::rep_prefix::none;
+    const auto wrap = [&](const std::string& body) {
+        if (!has_rep) { out << "  { " << body << " }\n"; return; }
+        out << "  while (regs[1] > 0) { regs[1]--; " << body;
+        if (decoded.rep == decoder::rep_prefix::repe) out << " if (!(flags & 0x40u)) break;";
+        else if (decoded.rep == decoder::rep_prefix::repne) out << " if ((flags & 0x40u)) break;";
+        out << " }\n";
+    };
+    const auto step_si = "regs[14] = static_cast<uint16_t>(regs[14] + df_step(" + std::to_string(d) + "));";
+    const auto step_di = "regs[15] = static_cast<uint16_t>(regs[15] + df_step(" + std::to_string(d) + "));";
+    if (base == 0xa4) {
+        if (word) wrap("uint16_t __v = static_cast<uint16_t>(mem[regs[14]]) | (static_cast<uint16_t>(mem[regs[14]+1]) << 8); "
+            "mem[regs[15]] = static_cast<uint8_t>(__v); mem[regs[15]+1] = static_cast<uint8_t>(__v >> 8); " + step_si + " " + step_di);
+        else wrap("mem[regs[15]] = mem[regs[14]]; " + step_si + " " + step_di);
+    } else if (base == 0xaa) {
+        if (word) wrap("mem[regs[15]] = static_cast<uint8_t>(regs[0]); mem[regs[15]+1] = static_cast<uint8_t>(regs[0] >> 8); " + step_di);
+        else wrap("mem[regs[15]] = static_cast<uint8_t>(regs[0]); " + step_di);
+    } else if (base == 0xac) {
+        if (word) wrap("regs[0] = static_cast<uint16_t>(mem[regs[14]]) | (static_cast<uint16_t>(mem[regs[14]+1]) << 8); " + step_si);
+        else wrap("regs[0] = static_cast<uint16_t>((regs[0] & 0xff00) | mem[regs[14]]); " + step_si);
+    } else if (base == 0xa6) {
+        if (word) wrap("uint16_t __a = static_cast<uint16_t>(mem[regs[14]]) | (static_cast<uint16_t>(mem[regs[14]+1]) << 8); "
+            "uint16_t __b = static_cast<uint16_t>(mem[regs[15]]) | (static_cast<uint16_t>(mem[regs[15]+1]) << 8); "
+            "update_flags_cmp(__a, __b, false); " + step_si + " " + step_di);
+        else wrap("update_flags_cmp(mem[regs[14]], mem[regs[15]], true); " + step_si + " " + step_di);
+    } else if (base == 0xae) {
+        if (word) wrap("uint16_t __b = static_cast<uint16_t>(mem[regs[15]]) | (static_cast<uint16_t>(mem[regs[15]+1]) << 8); "
+            "update_flags_cmp(regs[0], __b, false); " + step_di);
+        else wrap("update_flags_cmp(static_cast<uint8_t>(regs[0]), mem[regs[15]], true); " + step_di);
+    } else out << "  // unsupported string op 0x" << std::hex << op << std::dec << "\n";
 }
 
 [[nodiscard]] bool emit_conditional(std::ostream& out, decoder::branch_condition cond) {
@@ -334,6 +371,16 @@ emit_block_body(std::ostream& out, const loader::program_image& image, std::size
             out << "  if (call_sp == 0) { syscall(SYS_exit, regs[0] & 0xff); return; }\n  dispatch(call_stack[--call_sp]); return;\n";
             position = next; break;
         }
+        if (decoded->kind == decoder::instruction_kind::string) {
+            emit_string_op(out, image, *decoded);
+            position = next; break;
+        }
+        if (decoded->kind == decoder::instruction_kind::flags
+            && position + 1 < image.bytes.size()
+            && std::to_integer<std::uint8_t>(image.bytes[position + 1]) == 0xfc) { out << "  flags &= ~0x400u;\n"; position = next; continue; }
+        if (decoded->kind == decoder::instruction_kind::flags
+            && position + 1 < image.bytes.size()
+            && std::to_integer<std::uint8_t>(image.bytes[position + 1]) == 0xfd) { out << "  flags |= 0x400u;\n"; position = next; continue; }
         if (decoded->kind == decoder::instruction_kind::call) {
             if (decoded->indirect) { out << "  // indirect CALL\n  syscall(SYS_exit, 1); return;\n"; position = next; break; }
             const auto ret_addr = static_cast<std::uint32_t>(position + decoded->size);
