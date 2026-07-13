@@ -55,18 +55,27 @@ The objective is software preservation, reverse engineering, performance, and lo
 
 ## Current status
 
-The project has a C++23 build, validated COM/MZ loading with MZ relocation
-application, an expanding 8086 decoder, CFG/function/loop analysis, control
-flow IR, register SSA, constant propagation, DOS runtime services, and native
-ELF emission. The CLI produces executable ELF output for a deliberately small,
-verified DOS exit subset; it rejects other programs with context rather than
-changing their behavior.
+The straight-line compiler walks the CFG → IR → SSA pipeline and emits native
+ELF for the verified subset of DOS programs:
 
-Implemented runtime foundations include text video (`INT 10h`), virtual disk
-reads (`INT 13h`), keyboard queues (`INT 16h`), BIOS timer ticks (`INT 1Ah`), selected console/memory/clock
-services (`INT 21h`), conventional memory, a sandboxed DOS drive, and
-read/write/seek DOS file handles. The supported instruction semantics and backend
-lowering remain incomplete; full 8086 program recompilation is active work.
+* Word and byte register MOV (immediate, register, `[mem]` load/store)
+* Word and byte arithmetic/logic (`ADD`, `SUB`, `AND`, `OR`, `XOR`, `CMP`, `TEST`, `ADC`, `SBB`)
+  in immediate and register forms; `INC`/`DEC` word
+* `PUSH`/`POP` word with stack tracking in real-mode memory
+* `CALL` near with return-address push; `RET` and `RET imm16`
+* Conditional branches evaluated statically through the SSA flag chain
+  (`JE`, `JNE`, `JB`, `JAE`, `JL`, `JGE`, `JS`, `JNS`, ...)
+* `INT 21h` `AH=09h` (`$`-terminated string write), `AH=02h` (write char), `AH=4Ch` (exit)
+* `INT 10h` `AH=0Eh` (teletype char), `AH=02h` (cursor positioning as a no-op)
+
+DOS runtime services exist as standalone libraries (`int10`, `int13`,
+`int16`, `int21`, `int1a`, conventional memory, virtual drive, virtual file
+system) but the recompiled output is a self-contained ELF that talks to the
+host through Linux syscalls only — no DOS, no VM, no emulation.
+
+Data-dependent branches, indirect jumps (`jmp [bx]`), and runtime keyboard
+input are deferred: they require a full x86_64 codegen layer that is out of
+scope for the current subset.
 
 ### Build and test
 
@@ -82,19 +91,37 @@ Compile a supported DOS binary to a native executable:
 ./build/dosrecomp program.com -o program_linux
 ```
 
-The currently executable end-to-end subset is either `MOV AX, 4Cxxh; INT 21h`,
-`MOV AH, 4Ch; MOV AL, xx; INT 21h`, or a COM program whose entry performs
-`MOV DX, offset; MOV AH, 09h; INT 21h` followed by the first exit form. The
-last form emits the validated `$`-terminated string to stdout. Other program
-shapes are rejected with context while translation coverage expands.
+Example programs the pipeline accepts today:
 
-Emit readable C++ for that same verified subset:
+```asm
+; exit 7
+mov ax, 0x4c07
+int 21h
+
+; print "ok" then exit 6
+mov dx, msg
+mov ax, 0x0900          ; AH=09h, AL=0
+int 21h
+mov ax, 0x4c06
+int 21h
+msg: db "ok$"
+
+; write 'A' to stderr (file descriptor 2) then exit
+mov dl, 'A'
+mov ah, 02h
+int 21h
+mov ax, 0x4c07
+int 21h
+```
+
+Emit readable C++ for the same verified subset:
 
 ```bash
 ./build/dosrecomp program.com --emit-cpp > program.cpp
 ```
 
-Emit textual LLVM IR for the same subset:
+Emit textual LLVM IR for the same subset (one SSA definition per straight-line
+instruction):
 
 ```bash
 ./build/dosrecomp program.com --emit-llvm > program.ll
