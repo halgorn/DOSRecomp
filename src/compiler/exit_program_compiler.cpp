@@ -6,8 +6,8 @@
 #include "dosrecomp/semantics/instruction_translator.hpp"
 
 namespace dosrecomp::compiler {
-std::expected<std::vector<std::byte>, compile_error>
-exit_program_compiler::compile(const loader::program_image& image) {
+std::expected<std::uint8_t, compile_error>
+exit_program_compiler::extract_exit_code(const loader::program_image& image) {
     const auto entry = image.entry_offset();
     const auto move = decoder::instruction_decoder::decode_at(image.bytes, entry);
     if (!move) return std::unexpected(compile_error{"cannot decode entry instruction: " + move.error().message});
@@ -23,8 +23,14 @@ exit_program_compiler::compile(const loader::program_image& image) {
     if (effect->destination != ir::register_id::ax || (effect->immediate >> 8U) != 0x4cU) {
         return std::unexpected(compile_error{"INT 21h exit requires MOV AX, 4Cxxh"});
     }
-    return backend::elf_writer::emit_exit_executable(static_cast<std::uint8_t>(effect->immediate));
+    return static_cast<std::uint8_t>(effect->immediate);
+}
+
+std::expected<std::vector<std::byte>, compile_error>
+exit_program_compiler::compile(const loader::program_image& image) {
+    const auto exit_code = extract_exit_code(image);
+    if (!exit_code) return std::unexpected(exit_code.error());
+    return backend::elf_writer::emit_exit_executable(*exit_code);
 }
 
 } // namespace dosrecomp::compiler
-

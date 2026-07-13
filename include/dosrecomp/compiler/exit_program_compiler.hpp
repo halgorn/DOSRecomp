@@ -20,9 +20,12 @@ struct compile_error { std::string message; };
  */
 class exit_program_compiler final {
 public:
+    /** Extracts the preserved DOS process status from the supported entry sequence. */
+    [[nodiscard]] static std::expected<std::uint8_t, compile_error>
+    extract_exit_code(const loader::program_image& image);
+
     [[nodiscard]] static std::expected<std::vector<std::byte>, compile_error>
     compile(const loader::program_image& image);
 };
 
 } // namespace dosrecomp::compiler
-

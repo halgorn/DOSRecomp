@@ -10,7 +10,7 @@
 
 namespace {
 void print_usage() {
-    std::cerr << "Usage: dosrecomp <input.com|input.exe> [-o output|--verbose|--emit-cfg|--emit-ir]\n";
+    std::cerr << "Usage: dosrecomp <input.com|input.exe> [-o output|--verbose|--emit-cfg|--emit-ir|--emit-cpp]\n";
 }
 }
 
@@ -23,8 +23,9 @@ int main(int argc, char* argv[]) {
     const bool verbose = option == "--verbose";
     const bool emit_cfg = option == "--emit-cfg";
     const bool emit_ir = option == "--emit-ir";
+    const bool emit_cpp = option == "--emit-cpp";
     const bool explicit_output = argc == 4 && std::string_view(argv[2]) == "-o";
-    if ((argc == 3 && !verbose && !emit_cfg && !emit_ir) || (argc == 4 && !explicit_output)) {
+    if ((argc == 3 && !verbose && !emit_cfg && !emit_ir && !emit_cpp) || (argc == 4 && !explicit_output)) {
         print_usage();
         return 2;
     }
@@ -38,6 +39,15 @@ int main(int argc, char* argv[]) {
         std::cout << "format: " << (image.format == dosrecomp::loader::executable_format::com ? "COM" : "MZ")
                   << "\nload module bytes: " << image.bytes.size()
                   << "\nrelocations: " << image.relocations.size() << '\n';
+    }
+    if (emit_cpp) {
+        const auto exit_code = dosrecomp::compiler::exit_program_compiler::extract_exit_code(*result);
+        if (!exit_code) {
+            std::cerr << "dosrecomp: cannot emit C++: " << exit_code.error().message << '\n';
+            return 1;
+        }
+        std::cout << "#include <cstdlib>\n\nint main() { return " << static_cast<unsigned>(*exit_code) << "; }\n";
+        return 0;
     }
     if (emit_cfg || emit_ir) {
         const auto graph = dosrecomp::cfg::cfg_builder::build(result->bytes, result->entry_offset());

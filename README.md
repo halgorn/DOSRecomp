@@ -76,6 +76,12 @@ Compile a supported DOS binary to a native executable:
 The currently executable end-to-end subset is `MOV AX, 4Cxxh; INT 21h`; other
 program shapes are rejected with context while translation coverage expands.
 
+Emit readable C++ for that same verified subset:
+
+```bash
+./build/dosrecomp program.com --emit-cpp > program.cpp
+```
+
 Emit the currently supported direct-control-flow graph as GraphViz DOT:
 
 ```bash
