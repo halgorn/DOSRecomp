@@ -41,6 +41,8 @@ The CFG builder follows reachable direct edges from an explicit load-module
 entry offset. It creates basic blocks at control-flow boundaries and reports a
 decoder failure or external branch target as an error. Indirect control flow,
 switch-table recovery, and function discovery depend on broader operand support.
+Block starts are discovered to a fixed point, so a branch into the middle of a
+sequential region causes a proper split rather than overlapping blocks.
 
 ## Function recovery
 
