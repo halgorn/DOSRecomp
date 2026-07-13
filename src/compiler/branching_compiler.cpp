@@ -1,5 +1,4 @@
 #include "dosrecomp/compiler/branching_compiler.hpp"
-
 #include "dosrecomp/cfg/cfg_builder.hpp"
 #include "dosrecomp/compiler/straight_line_compiler.hpp"
 #include "dosrecomp/decoder/instruction_decoder.hpp"
@@ -119,22 +118,23 @@ void emit_int21_runtime(std::ostream& out) {
     out << "      struct tm tm; gmtime_r(&ts.tv_sec, &tm);\n";
     out << "      if (ah == 0x2a) regs[0] = static_cast<uint16_t>(((tm.tm_year + 1900 - 1980) << 9) | (tm.tm_mon << 5) | tm.tm_mday), regs[2] = 0;\n";
     out << "      else regs[0] = static_cast<uint16_t>((tm.tm_hour << 8) | tm.tm_min), regs[2] = tm.tm_sec; break; }\n";
+    out << "    case 0x3b: { uint32_t base = (static_cast<uint32_t>(regs[11]) << 4) + regs[2], len = 0;\n";
+    out << "      while (mem[base + len]) ++len; char tmp[260] = {0};\n";
+    out << "      for (uint32_t k = 0; k < len && k < 259; ++k) tmp[k] = static_cast<char>(mem[base + k]);\n";
+    out << "      regs[0] = chdir(tmp) == 0 ? 0u : 0x0005u; break; }\n";
+    out << "    case 0x47: { char tmp[260] = {0};\n";
+    out << "      if (getcwd(tmp, sizeof(tmp) - 1) != nullptr) { uint32_t k = 0;\n";
+    out << "        while (tmp[k] && k < 259) { mem[regs[2] + k] = static_cast<uint8_t>(tmp[k]); ++k; } regs[0] = 0; }\n";
+    out << "      else regs[0] = 0x0005; break; }\n";
     out << "    default: syscall(SYS_exit, 1); return;\n    }\n  }\n";
 }
 
 void emit_int10_runtime(std::ostream& out) {
-    out << "  {\n";
-    out << "    const uint8_t ah = static_cast<uint8_t>(regs[0] >> 8);\n";
+    out << "  { const uint8_t ah = static_cast<uint8_t>(regs[0] >> 8);\n";
     out << "    switch (ah) {\n";
-    out << "    case 0x0e: {\n";
-    out << "      uint8_t ch = static_cast<uint8_t>(regs[0]);\n";
-    out << "      syscall(SYS_write, 1, &ch, 1);\n";
-    out << "      break;\n";
-    out << "    }\n";
+    out << "    case 0x0e: { uint8_t ch = static_cast<uint8_t>(regs[0]); syscall(SYS_write, 1, &ch, 1); break; }\n";
     out << "    case 0x02: break;\n";
-    out << "    default: syscall(SYS_exit, 1); return;\n";
-    out << "    }\n";
-    out << "  }\n";
+    out << "    default: syscall(SYS_exit, 1); return;\n    }\n  }\n";
 }
 
 void emit_int16_runtime(std::ostream& out) {
@@ -203,6 +203,7 @@ void emit_move(std::ostream& out, const decoder::instruction& decoded) {
         return;
     }
     if (is_byte) out << "  " << byte_reg_store(dst.reg, byte_reg_access(src.reg)) << ";\n";
+
     else out << "  regs[" << word_reg_index(dst.reg) << "] = regs[" << word_reg_index(src.reg) << "];\n";
 }
 
@@ -259,10 +260,10 @@ void emit_arithmetic(std::ostream& out, const decoder::instruction& decoded) {
 }
 
 [[nodiscard]] std::expected<void, branching_compile_error>
-emit_block_body(std::ostream& out, const loader::program_image& image, std::size_t start, std::size_t stop_before = 0);
+emit_block_body(std::ostream& out, const loader::program_image& image, std::size_t start, std::size_t stop_before, const std::set<std::size_t>& block_targets);
 
 [[nodiscard]] std::expected<void, branching_compile_error>
-emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t start) {
+emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t start, const std::set<std::size_t>& block_targets) {
     out << "static inline __attribute__((always_inline)) void " << block_label(start) << "() {\n";
     std::size_t loop_end = 0; decoder::branch_condition loop_cond{};
     for (std::size_t scan = start; scan < image.bytes.size(); ) {
@@ -279,18 +280,18 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
     }
     if (loop_end != 0) {
         out << "  do {\n";
-        const auto body_result = emit_block_body(out, image, start, loop_end);
+        const auto body_result = emit_block_body(out, image, start, loop_end, block_targets);
         if (!body_result) return body_result;
         out << "  } while (";
         if (!emit_conditional(out, loop_cond)) out << "false";
         out << ");\n";
-    } else { const auto body_result = emit_block_body(out, image, start); if (!body_result) return body_result; }
+    } else { const auto body_result = emit_block_body(out, image, start, 0, block_targets); if (!body_result) return body_result; }
     out << "}\n\n";
     return {};
 }
 
 [[nodiscard]] std::expected<void, branching_compile_error>
-emit_block_body(std::ostream& out, const loader::program_image& image, std::size_t start, std::size_t stop_before) {
+emit_block_body(std::ostream& out, const loader::program_image& image, std::size_t start, std::size_t stop_before, const std::set<std::size_t>& block_targets) {
     std::size_t position = start;
     while (position < image.bytes.size()) {
         if (stop_before != 0 && position == stop_before) break;
@@ -301,9 +302,10 @@ emit_block_body(std::ostream& out, const loader::program_image& image, std::size
             if (decoded->interrupt_number == 0x21) emit_int21_runtime(out);
             else if (decoded->interrupt_number == 0x10) emit_int10_runtime(out);
             else if (decoded->interrupt_number == 0x16) emit_int16_runtime(out);
-            else { out << "  syscall(SYS_exit, 1); return;\n"; }
+            else { out << "  syscall(SYS_exit, 1); return;\n"; position = next; break; }
+            if (next < image.bytes.size() && block_targets.contains(next)) out << "  " << block_label(next) << "();\n";
             position = next;
-            continue;
+            break;
         }
         if (decoded->kind == decoder::instruction_kind::jump) {
             if (decoded->indirect) {
@@ -373,8 +375,9 @@ collect_block_starts(const loader::program_image& image) {
                 }
                 const bool falls_through = kind == decoder::instruction_kind::conditional_jump
                     || kind == decoder::instruction_kind::call
-                    || (kind == decoder::instruction_kind::interrupt &&
-                        (decoded->interrupt_number == 0x21 || decoded->interrupt_number == 0x10 || decoded->interrupt_number == 0x16));
+                    || (kind == decoder::instruction_kind::interrupt && next + 1 < image.bytes.size()
+                        && std::to_integer<std::uint8_t>(image.bytes[next]) >= 0x40
+                        && std::to_integer<std::uint8_t>(image.bytes[next]) <= 0xbf);
                 if (falls_through && next < image.bytes.size()) {
                     if (starts.insert(next).second) changed = true;
                 }
@@ -385,10 +388,15 @@ collect_block_starts(const loader::program_image& image) {
             }
         }
     }
-    for (std::size_t pos = 0; pos < image.bytes.size(); ) {
+    for (std::size_t pos = 0; pos < image.bytes.size() && starts.size() < 256; ) {
         const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, pos);
         if (!decoded) break;
         starts.insert(pos);
+        if (decoded->kind == decoder::instruction_kind::interrupt) {
+            const auto after = pos + decoded->size;
+            starts.insert(after);
+            break;
+        }
         pos += decoded->size;
     }
     return starts;
@@ -396,14 +404,12 @@ collect_block_starts(const loader::program_image& image) {
 
 void emit_image_array(std::ostream& out, const std::vector<std::byte>& bytes) {
     out << "  static const uint8_t img[] = {";
-    for (std::size_t i = 0; i < bytes.size(); ++i) {
-        if (i % 16 == 0) out << "\n    ";
+    for (std::size_t i = 0; i < bytes.size(); ++i) { if (i % 16 == 0) out << "\n    ";
         out << "0x" << std::hex << std::setw(2) << std::setfill('0')
             << static_cast<unsigned>(std::to_integer<std::uint8_t>(bytes[i])) << std::dec << ",";
     }
     out << "\n  };\n";
 }
-
 [[nodiscard]] std::expected<void, branching_compile_error>
 write_main(std::ostream& out, const loader::program_image& image) {
     out << "int main() {\n  regs[4] = 0xfffe;\n";
@@ -432,9 +438,7 @@ emit_dispatch(std::ostream& out, const std::set<std::size_t>& targets) {
     out << "static void dispatch(uint32_t target) {\n  switch (target) {\n";
     for (const auto t : targets)
         out << "    case 0x" << std::hex << t << std::dec << ": " << block_label(t) << "(); return;\n";
-    out << "    default: syscall(SYS_exit, 1); return;\n  }\n}\n\n";
-    return {};
-}
+    out << "    default: syscall(SYS_exit, 1); return;\n  }\n}\n\n"; return {}; }
 
 [[nodiscard]] std::expected<std::string, branching_compile_error>
 emit_c_runtime(const loader::program_image& image) {
@@ -443,9 +447,8 @@ emit_c_runtime(const loader::program_image& image) {
     std::ostringstream out;
     emit_runtime_header(out);
     for (const auto start : *starts) out << "static inline __attribute__((always_inline)) void " << block_label(start) << "();\n";
-    out << "\n";
     for (const auto start : *starts) {
-        const auto result = emit_block_at(out, image, start);
+        const auto result = emit_block_at(out, image, start, *starts);
         if (!result) return std::unexpected(result.error());
     }
     const auto dispatch_result = emit_dispatch(out, *starts);
@@ -463,7 +466,6 @@ branching_compiler::extract_exit_code(const loader::program_image& image) {
     if (!result) return std::unexpected(branching_compile_error{result.error().message});
     return *result;
 }
-
 std::expected<std::vector<std::byte>, branching_compile_error>
 branching_compiler::compile(const loader::program_image& image) {
     const auto c_source = emit_c_runtime(image);
