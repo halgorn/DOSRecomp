@@ -65,6 +65,7 @@ struct instruction {
     std::uint8_t operand_count{};
     branch_condition condition{branch_condition::always};
     alu_operation alu{alu_operation::none};
+    bool stack_pop{false};
 };
 
 /** A malformed, truncated, or not-yet-supported instruction. */

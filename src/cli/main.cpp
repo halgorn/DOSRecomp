@@ -1,6 +1,6 @@
 #include "dosrecomp/loader/binary_loader.hpp"
 #include "dosrecomp/cfg/cfg_builder.hpp"
-#include "dosrecomp/compiler/exit_program_compiler.hpp"
+#include "dosrecomp/compiler/straight_line_compiler.hpp"
 #include "dosrecomp/ir/control_flow_ir.hpp"
 
 #include <filesystem>
@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
                   << "\nrelocations: " << image.relocations.size() << '\n';
     }
     if (emit_cpp) {
-        const auto exit_code = dosrecomp::compiler::exit_program_compiler::extract_exit_code(*result);
+        const auto exit_code = dosrecomp::compiler::straight_line_compiler::extract_exit_code(*result);
         if (!exit_code) {
             std::cerr << "dosrecomp: cannot emit C++: " << exit_code.error().message << '\n';
             return 1;
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     if (emit_llvm) {
-        const auto llvm = dosrecomp::compiler::exit_program_compiler::emit_llvm(*result);
+        const auto llvm = dosrecomp::compiler::straight_line_compiler::emit_llvm(*result);
         if (!llvm) {
             std::cerr << "dosrecomp: cannot emit LLVM IR: " << llvm.error().message << '\n';
             return 1;
@@ -97,7 +97,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "dosrecomp: cannot infer an output path\n";
         return 1;
     }
-    const auto executable = dosrecomp::compiler::exit_program_compiler::compile(*result);
+    const auto executable = dosrecomp::compiler::straight_line_compiler::compile(*result);
     if (!executable) {
         std::cerr << "dosrecomp: cannot compile: " << executable.error().message << '\n';
         return 1;

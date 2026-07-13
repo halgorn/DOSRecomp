@@ -18,7 +18,7 @@ namespace {
 [[nodiscard]] bool ends_block(decoder::instruction_kind kind) {
     return kind == decoder::instruction_kind::call || kind == decoder::instruction_kind::jump ||
            kind == decoder::instruction_kind::conditional_jump || kind == decoder::instruction_kind::loop ||
-           kind == decoder::instruction_kind::return_;
+           kind == decoder::instruction_kind::return_ || kind == decoder::instruction_kind::interrupt;
 }
 } // namespace
 
@@ -48,7 +48,8 @@ cfg_builder::build(const std::vector<std::byte>& code, std::size_t entry_offset)
                     position = next;
                     continue;
                 }
-                const bool has_direct_target = instruction.kind != decoder::instruction_kind::return_;
+                const bool has_direct_target = instruction.kind != decoder::instruction_kind::return_ &&
+                    instruction.kind != decoder::instruction_kind::interrupt;
                 if (has_direct_target) {
                     const auto target = target_for(instruction, code.size());
                     if (!target) return std::unexpected(target.error());

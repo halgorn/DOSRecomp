@@ -88,6 +88,11 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
     }
     return operand{operand_kind::memory, width, register_name::al, 0, modrm, addresses[rm], count, displacement, direct_address};
 }
+[[nodiscard]] alu_operation alu_for_extension(std::uint8_t extension) {
+    constexpr std::array<alu_operation, 8> table{alu_operation::add, alu_operation::bit_or, alu_operation::adc,
+        alu_operation::sbb, alu_operation::bit_and, alu_operation::subtract, alu_operation::bit_xor, alu_operation::compare};
+    return table[extension & 0x07U];
+}
 [[nodiscard]] instruction accumulator_immediate(instruction_kind kind, const std::vector<std::byte>& code,
                                                  std::size_t offset, std::uint8_t opcode) {
     const auto width = (opcode & 1U) == 0 ? operand_width::byte : operand_width::word;
@@ -97,11 +102,8 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
         immediate = static_cast<std::uint16_t>(immediate | (static_cast<std::uint16_t>(byte_at(code, offset + 2)) << 8U));
     }
     const auto accumulator = width == operand_width::byte ? register_name::al : register_name::ax;
-    const auto high = opcode & 0xf8U;
-    const auto alu = high == 0x00 ? alu_operation::add : high == 0x08 ? alu_operation::bit_or :
-        high == 0x10 ? alu_operation::adc : high == 0x18 ? alu_operation::sbb :
-        high == 0x20 ? alu_operation::bit_and : high == 0x28 ? alu_operation::subtract :
-        high == 0x30 ? alu_operation::bit_xor : high == 0x38 ? alu_operation::compare : alu_operation::test;
+    const alu_operation alu = opcode == 0xa8 || opcode == 0xa9 ? alu_operation::test
+        : alu_for_extension(static_cast<std::uint8_t>((opcode >> 3U) & 0x07U));
     return instruction{kind, offset, size, 0, 0,
         {operand{operand_kind::reg, width, accumulator, 0, 0},
          operand{operand_kind::immediate, width, register_name::al, immediate, 0}}, 2, branch_condition::always, alu};
@@ -187,14 +189,42 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         return accumulator_immediate(kind, code, offset, opcode);
     }
     if ((opcode >= 0x50 && opcode <= 0x5f) || opcode == 0x06 || opcode == 0x07 || opcode == 0x0e || opcode == 0x16 || opcode == 0x17 || opcode == 0x1e || opcode == 0x1f) {
+        if (opcode >= 0x50 && opcode <= 0x57) {
+            return instruction{instruction_kind::stack, offset, 1, 0, 0,
+                {register_operand(operand_width::word, opcode - 0x50U)}, 1, branch_condition::always, alu_operation::none, false};
+        }
+        if (opcode >= 0x58 && opcode <= 0x5f) {
+            return instruction{instruction_kind::stack, offset, 1, 0, 0,
+                {register_operand(operand_width::word, opcode - 0x58U)}, 1, branch_condition::always, alu_operation::none, true};
+        }
         return instruction{instruction_kind::stack, offset, 1, 0, 0};
+    }
+    if (opcode >= 0x40 && opcode <= 0x47) {
+        const auto reg = register_operand(operand_width::word, opcode & 0x07U);
+        return instruction{instruction_kind::arithmetic, offset, 1, 0, 0,
+            {reg, operand{operand_kind::immediate, operand_width::word, register_name::al, 1, 0}}, 2,
+            branch_condition::always, alu_operation::add};
+    }
+    if (opcode >= 0x48 && opcode <= 0x4f) {
+        const auto reg = register_operand(operand_width::word, opcode & 0x07U);
+        return instruction{instruction_kind::arithmetic, offset, 1, 0, 0,
+            {reg, operand{operand_kind::immediate, operand_width::word, register_name::al, 1, 0}}, 2,
+            branch_condition::always, alu_operation::subtract};
     }
     if (is_modrm_arithmetic(opcode)) {
         const auto size = modrm_size(code, offset + 1, 0);
         if (!size) return std::unexpected(size.error());
+        const auto width = (opcode & 1U) == 0 ? operand_width::byte : operand_width::word;
+        const auto modrm = byte_at(code, offset + 1);
+        const auto reg = register_operand(width, (modrm >> 3U) & 7U);
+        const auto rm = rm_operand(code, offset + 1, width, modrm);
+        const auto destination = (opcode & 2U) == 0 ? rm : reg;
+        const auto source = (opcode & 2U) == 0 ? reg : rm;
+        const alu_operation alu = opcode == 0x84 || opcode == 0x85
+            ? alu_operation::test : alu_for_extension(static_cast<std::uint8_t>((opcode >> 3U) & 0x07U));
         const auto kind = (opcode & 0xf8U) == 0x38U || opcode == 0x84 || opcode == 0x85
             ? instruction_kind::compare : instruction_kind::arithmetic;
-        return instruction{kind, offset, *size, 0, 0};
+        return instruction{kind, offset, *size, 0, 0, {destination, source}, 2, branch_condition::always, alu};
     }
     if (opcode >= 0x88 && opcode <= 0x8b) {
         const auto size = modrm_size(code, offset + 1, 0);

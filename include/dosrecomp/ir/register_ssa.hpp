@@ -18,6 +18,14 @@ enum class value_kind : std::uint8_t { entry, definition, operation, phi };
 /** Arithmetic meaning of an SSA operation definition. */
 enum class operation_kind : std::uint8_t { add, subtract, bit_and, bit_or, bit_xor, compare, test };
 
+/** Concrete 8086 flag bits lifted from a comparison-style SSA definition. */
+struct compare_flags {
+    bool zero{};
+    bool sign{};
+    bool carry{};
+    bool overflow{};
+};
+
 /** Immutable SSA definition and its incoming value IDs. */
 struct ssa_value {
     std::size_t id{};
@@ -51,6 +59,9 @@ public:
                                                std::vector<std::size_t> inputs);
     [[nodiscard]] register_state merge(const register_state& first, const register_state& second);
     [[nodiscard]] const std::vector<ssa_value>& values() const noexcept;
+
+    /** Lifts concrete compare/test flag bits from an SSA chain that bottoms out in constants. */
+    [[nodiscard]] compare_flags resolve_compare_flags(std::size_t flags_ssa) const;
 
 private:
     std::vector<ssa_value> values_;
