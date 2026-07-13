@@ -134,6 +134,10 @@ bounded reads, writes, and close operations. It starts handles at five,
 rejects invalid or mode-incompatible handles, and never resolves a path outside
 the drive.
 
+`current_directory` tracks a guest-visible DOS path only after the matching
+virtual-drive directory exists, keeping host paths out of program-visible
+state and rejecting traversal attempts.
+
 `int21_file_dispatcher` maps DOS `3Ch`, `3Dh`, `3Eh`, `3Fh`, and `40h`
 requests directly to those virtual handles. Path decoding remains a caller
 responsibility, keeping the interrupt boundary independent of guest-memory
