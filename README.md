@@ -6,6 +6,7 @@
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue)]()
 [![LLVM](https://img.shields.io/badge/LLVM-Compatible-orange)]()
 [![Linux](https://img.shields.io/badge/Linux-x86__64-success)]()
+[![CI](https://github.com/halgorn/DOSRecomp/actions/workflows/ci.yml/badge.svg)](https://github.com/halgorn/DOSRecomp/actions/workflows/ci.yml)
 
 ## Overview
 
