@@ -95,9 +95,14 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
         immediate = static_cast<std::uint16_t>(immediate | (static_cast<std::uint16_t>(byte_at(code, offset + 2)) << 8U));
     }
     const auto accumulator = width == operand_width::byte ? register_name::al : register_name::ax;
+    const auto high = opcode & 0xf8U;
+    const auto alu = high == 0x00 ? alu_operation::add : high == 0x08 ? alu_operation::bit_or :
+        high == 0x10 ? alu_operation::adc : high == 0x18 ? alu_operation::sbb :
+        high == 0x20 ? alu_operation::bit_and : high == 0x28 ? alu_operation::subtract :
+        high == 0x30 ? alu_operation::bit_xor : high == 0x38 ? alu_operation::compare : alu_operation::test;
     return instruction{kind, offset, size, 0, 0,
         {operand{operand_kind::reg, width, accumulator, 0, 0},
-         operand{operand_kind::immediate, width, register_name::al, immediate, 0}}, 2};
+         operand{operand_kind::immediate, width, register_name::al, immediate, 0}}, 2, branch_condition::always, alu};
 }
 } // namespace
 

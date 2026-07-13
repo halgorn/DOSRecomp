@@ -56,7 +56,7 @@ int main() {
         expect(register_modrm && register_modrm->operands[0].reg == register_name::bx && register_modrm->operands[1].reg == register_name::ax, "decode register ModR/M MOV operands") &&
         expect(arithmetic && arithmetic->kind == instruction_kind::arithmetic && arithmetic->size == 4, "decode arithmetic immediate") &&
         expect(accumulator && accumulator->kind == instruction_kind::compare && accumulator->size == 3 && accumulator->operand_count == 2 &&
-            accumulator->operands[0].reg == register_name::ax && accumulator->operands[1].immediate == 0, "decode accumulator immediate") &&
+            accumulator->operands[0].reg == register_name::ax && accumulator->operands[1].immediate == 0 && accumulator->alu == alu_operation::compare, "decode accumulator immediate") &&
         expect(flag && flag->kind == instruction_kind::flags, "decode flag control") &&
         expect(string && string->kind == instruction_kind::string, "decode string instruction") &&
         expect(io && io->kind == instruction_kind::io && io->size == 2, "decode port I/O") &&

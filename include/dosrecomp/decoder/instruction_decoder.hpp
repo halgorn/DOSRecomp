@@ -38,6 +38,9 @@ enum class branch_condition : std::uint8_t {
     greater, always
 };
 
+/** Arithmetic/logic operation encoded by a decoded instruction. */
+enum class alu_operation : std::uint8_t { none, add, adc, bit_or, sbb, bit_and, subtract, bit_xor, compare, test };
+
 /** A decoded operand; memory forms retain their ModR/M byte for later lowering. */
 struct operand {
     operand_kind kind{operand_kind::none};
@@ -60,6 +63,7 @@ struct instruction {
     std::array<operand, 2> operands{};
     std::uint8_t operand_count{};
     branch_condition condition{branch_condition::always};
+    alu_operation alu{alu_operation::none};
 };
 
 /** A malformed, truncated, or not-yet-supported instruction. */
