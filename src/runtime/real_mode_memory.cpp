@@ -18,4 +18,10 @@ std::expected<void, memory_error> real_mode_memory::write16(std::uint32_t addres
     if (address >= bytes_.size() || bytes_.size() - address < 2) return std::unexpected(memory_error{"word crosses real-mode memory boundary"});
     bytes_[address] = static_cast<std::byte>(value); bytes_[address + 1] = static_cast<std::byte>(value >> 8U); return {};
 }
+std::expected<std::uint8_t, memory_error> real_mode_memory::read8(std::uint16_t segment, std::uint16_t offset) const {
+    return read8(physical_address(segment, offset));
+}
+std::expected<void, memory_error> real_mode_memory::write8(std::uint16_t segment, std::uint16_t offset, std::uint8_t value) {
+    return write8(physical_address(segment, offset), value);
+}
 } // namespace dosrecomp::runtime
