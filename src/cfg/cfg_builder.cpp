@@ -55,7 +55,9 @@ cfg_builder::build(const std::vector<std::byte>& code, std::size_t entry_offset)
                     block.successors.push_back(*target);
                     changed = starts.insert(*target).second || changed;
                 }
-                if (instruction.kind == decoder::instruction_kind::conditional_jump) block.condition = instruction.condition;
+                if (instruction.kind == decoder::instruction_kind::conditional_jump || instruction.kind == decoder::instruction_kind::loop) {
+                    block.condition = instruction.condition;
+                }
                 const bool falls_through = instruction.kind == decoder::instruction_kind::call ||
                     instruction.kind == decoder::instruction_kind::conditional_jump || instruction.kind == decoder::instruction_kind::loop;
                 if (falls_through && next < code.size()) {

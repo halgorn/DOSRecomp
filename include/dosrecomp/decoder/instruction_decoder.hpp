@@ -35,7 +35,7 @@ enum class operand_kind : std::uint8_t { none, reg, immediate, memory };
 enum class branch_condition : std::uint8_t {
     overflow, not_overflow, below, above_or_equal, equal, not_equal, below_or_equal,
     above, sign, not_sign, parity, not_parity, less, greater_or_equal, less_or_equal,
-    greater, always
+    greater, loop_not_equal, loop_equal, loop, cx_zero, always
 };
 
 /** Arithmetic/logic operation encoded by a decoded instruction. */

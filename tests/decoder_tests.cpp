@@ -43,6 +43,7 @@ int main() {
     const auto repeated_segment_string = instruction_decoder::decode_at({b(0xf3), b(0x26), b(0xa4)}, 0);
     const auto far_pointer_load = instruction_decoder::decode_at({b(0xc4), b(0x06), b(0x34), b(0x12)}, 0);
     const auto coprocessor = instruction_decoder::decode_at({b(0xd8), b(0x06), b(0x34), b(0x12)}, 0);
+    const auto loop = instruction_decoder::decode_at({b(0xe2), b(0xfe)}, 0);
     const auto byte_move = instruction_decoder::decode_at({b(0xb4), b(0x4c)}, 0);
     const bool passed = expect(move && move->size == 3 && move->kind == instruction_kind::move_immediate && move->operand_count == 2 &&
         move->operands[0].kind == operand_kind::reg && move->operands[0].reg == register_name::ax &&
@@ -75,5 +76,6 @@ int main() {
         expect(segment_move && segment_move->kind == instruction_kind::move && segment_move->size == 3, "decode segment override") &&
         expect(repeated_segment_string && repeated_segment_string->kind == instruction_kind::string && repeated_segment_string->size == 3, "decode combined prefixes") &&
         expect(far_pointer_load && far_pointer_load->kind == instruction_kind::move && far_pointer_load->size == 4, "decode far pointer load") &&
-        expect(coprocessor && coprocessor->kind == instruction_kind::coprocessor && coprocessor->size == 4, "decode coprocessor escape")) ? EXIT_SUCCESS : EXIT_FAILURE;
+        expect(coprocessor && coprocessor->kind == instruction_kind::coprocessor && coprocessor->size == 4, "decode coprocessor escape") &&
+        expect(loop && loop->condition == branch_condition::loop && loop->relative_target == -2, "decode LOOP condition")) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

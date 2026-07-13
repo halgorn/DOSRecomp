@@ -40,7 +40,8 @@ accumulator and immediate operands, providing the verified input for flag and
 branch semantics.
 Short conditional branches preserve their exact 8086 condition (`JE`, `JNE`,
 signed and unsigned relations, and flag tests), rather than exposing only a
-generic conditional edge.
+generic conditional edge. `LOOP`, `LOOPE`, `LOOPNE`, and `JCXZ` likewise
+preserve their distinct CX/flag conditions through CFG lowering.
 8086 segment, LOCK, and REP prefix combinations are included in instruction
 boundaries and are bounded to the architectural 15-byte instruction maximum.
 Far-pointer loads and 8087 escape encodings are also bounded and labeled, but

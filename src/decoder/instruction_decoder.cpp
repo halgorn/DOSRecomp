@@ -282,7 +282,8 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
     if (opcode >= 0xe0 && opcode <= 0xe3) {
         if (code.size() - offset < 2) return truncated(offset);
         return instruction{instruction_kind::loop, offset, 2,
-            static_cast<std::int8_t>(byte_at(code, offset + 1)), 0};
+            static_cast<std::int8_t>(byte_at(code, offset + 1)), 0, {}, 0,
+            static_cast<branch_condition>(static_cast<std::uint8_t>(branch_condition::loop_not_equal) + (opcode - 0xe0U))};
     }
     std::ostringstream message;
     message << "unsupported 8086 opcode 0x" << std::hex << static_cast<unsigned>(opcode)
