@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string>
+#include <utility>
 
 #include <sys/wait.h>
 #include <unistd.h>
@@ -26,6 +28,27 @@ int run_output(const std::filesystem::path& executable) {
     }
     int status = 0;
     return child > 0 && waitpid(child, &status, 0) == child && WIFEXITED(status) ? WEXITSTATUS(status) : 255;
+}
+
+std::pair<int, std::string> run_dot(const std::filesystem::path& executable, const std::filesystem::path& input) {
+    int pipe_fds[2]{};
+    if (pipe(pipe_fds) != 0) return {255, {}};
+    const auto child = fork();
+    if (child == 0) {
+        close(pipe_fds[0]);
+        dup2(pipe_fds[1], STDOUT_FILENO);
+        close(pipe_fds[1]);
+        execl(executable.c_str(), executable.c_str(), input.c_str(), "--emit-dot", nullptr);
+        _exit(127);
+    }
+    close(pipe_fds[1]);
+    std::string output;
+    std::array<char, 128> buffer{};
+    for (ssize_t count = 0; (count = read(pipe_fds[0], buffer.data(), buffer.size())) > 0;) output.append(buffer.data(), static_cast<std::size_t>(count));
+    close(pipe_fds[0]);
+    int status = 0;
+    const auto waited = child > 0 ? waitpid(child, &status, 0) : -1;
+    return {waited == child && WIFEXITED(status) ? WEXITSTATUS(status) : 255, std::move(output)};
 }
 }
 
@@ -53,11 +76,13 @@ int main() {
     const auto output_status = compile_status == 0 ? run_output(output) : 255;
     const auto byte_compile_status = run(DOSRECOMP_CLI_PATH, byte_input, byte_output);
     const auto byte_output_status = byte_compile_status == 0 ? run_output(byte_output) : 255;
+    const auto [dot_status, dot_output] = run_dot(DOSRECOMP_CLI_PATH, input);
     std::filesystem::remove(input);
     std::filesystem::remove(output);
     std::filesystem::remove(byte_input);
     std::filesystem::remove(byte_output);
-    if (compile_status != 0 || output_status != 7 || byte_compile_status != 0 || byte_output_status != 3) {
+    if (compile_status != 0 || output_status != 7 || byte_compile_status != 0 || byte_output_status != 3 ||
+        dot_status != 0 || dot_output.rfind("digraph cfg", 0) != 0) {
         std::cerr << "CLI recompilation integration test failed\n";
         return EXIT_FAILURE;
     }
