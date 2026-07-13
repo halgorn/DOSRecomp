@@ -8,6 +8,7 @@
 #include "dosrecomp/runtime/real_mode_memory.hpp"
 #include "dosrecomp/semantics/instruction_translator.hpp"
 
+#include <fstream>
 #include <unordered_map>
 #include <vector>
 
@@ -66,6 +67,7 @@ struct translation_state {
     std::vector<std::vector<std::byte>> write_payloads;
     std::vector<backend::write_call> writes;
     std::vector<backend::syscall_action> actions;
+    std::unordered_map<std::uint16_t, std::vector<std::byte>> read_payloads;
     std::uint32_t next_fake_handle{3};
     std::unordered_map<std::uint16_t, std::uint32_t> handle_for_bx;
     std::vector<bool> visited_block;
@@ -125,19 +127,31 @@ translate_block(const loader::program_image& image, const cfg::control_flow_grap
                 (void)ts.ssa.define_constant(ts.state, ir::register_id::ax, static_cast<std::uint16_t>(fake_handle));
                 (void)ts.ssa.define_constant(ts.state, ir::register_id::bx, static_cast<std::uint16_t>(fake_handle));
                 ts.handle_for_bx[static_cast<std::uint16_t>(fake_handle)] = fake_handle;
+                if (flags == 0) {
+                    std::string path_str;
+                    for (auto b : action.open.filename) path_str.push_back(static_cast<char>(b));
+                    std::ifstream in_file(path_str, std::ios::binary);
+                    if (in_file) {
+                        in_file.seekg(0, std::ios::end);
+                        in_file.seekg(0);
+                        std::vector<std::uint8_t> chars((std::istreambuf_iterator<char>(in_file)), std::istreambuf_iterator<char>());
+                        std::vector<std::byte> contents;
+                        contents.reserve(chars.size());
+                        for (auto c : chars) contents.push_back(static_cast<std::byte>(c));
+                        ts.read_payloads[static_cast<std::uint16_t>(fake_handle)] = std::move(contents);
+                    }
+                }
                 position += decoded->size;
                 continue;
             }
             if (ah_value == 0x3eU) {
                 const auto bx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::bx)];
                 const auto bx_constant = resolve_exit_code(ts.ssa, ts.state, bx_ssa);
-                const auto real_fd = ts.handle_for_bx.find(static_cast<std::uint16_t>(bx_constant));
-                if (real_fd == ts.handle_for_bx.end()) return std::unexpected(straight_line_compile_error{"INT 21h/AH=3Eh close on unknown file handle"});
-                backend::syscall_action action{};
-                action.kind = backend::syscall_action::kind::close;
-                action.close.file_descriptor = real_fd->second;
-                ts.actions.push_back(action);
-                ts.handle_for_bx.erase(real_fd);
+                if (bx_constant != 1 && bx_constant != 2) {
+                    const auto real_fd = ts.handle_for_bx.find(static_cast<std::uint16_t>(bx_constant));
+                    if (real_fd == ts.handle_for_bx.end()) return std::unexpected(straight_line_compile_error{"INT 21h/AH=3Eh close on unknown file handle"});
+                    ts.handle_for_bx.erase(real_fd);
+                }
                 position += decoded->size;
                 continue;
             }
@@ -148,8 +162,14 @@ translate_block(const loader::program_image& image, const cfg::control_flow_grap
                 const auto cx_value = resolve_exit_code(ts.ssa, ts.state, cx_ssa);
                 const auto dx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::dx)];
                 const auto dx_value = resolve_exit_code(ts.ssa, ts.state, dx_ssa);
-                const auto real_fd = ts.handle_for_bx.find(static_cast<std::uint16_t>(bx_constant));
-                if (real_fd == ts.handle_for_bx.end()) return std::unexpected(straight_line_compile_error{"INT 21h/AH=40h write on unknown file handle"});
+                std::uint32_t file_descriptor = 0;
+                if (bx_constant == 1) file_descriptor = 1;
+                else if (bx_constant == 2) file_descriptor = 2;
+                else {
+                    const auto real_fd = ts.handle_for_bx.find(static_cast<std::uint16_t>(bx_constant));
+                    if (real_fd == ts.handle_for_bx.end()) return std::unexpected(straight_line_compile_error{"INT 21h/AH=40h write on unknown file handle"});
+                    file_descriptor = real_fd->second;
+                }
                 std::vector<std::byte> payload;
                 for (std::uint16_t index = 0; index < cx_value; ++index) {
                     const auto value = ts.memory.read8(dx_value + index);
@@ -160,8 +180,32 @@ translate_block(const loader::program_image& image, const cfg::control_flow_grap
                 backend::syscall_action action{};
                 action.kind = backend::syscall_action::kind::write;
                 action.write.payload = std::span<const std::byte>{ts.write_payloads.back().data(), ts.write_payloads.back().size()};
-                action.write.file_descriptor = real_fd->second;
+                action.write.file_descriptor = file_descriptor;
                 ts.actions.push_back(action);
+                position += decoded->size;
+                continue;
+            }
+            if (ah_value == 0x3fU) {
+                const auto bx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::bx)];
+                const auto bx_constant = resolve_exit_code(ts.ssa, ts.state, bx_ssa);
+                const auto cx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::cx)];
+                const auto cx_value = resolve_exit_code(ts.ssa, ts.state, cx_ssa);
+                const auto dx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::dx)];
+                const auto dx_value = resolve_exit_code(ts.ssa, ts.state, dx_ssa);
+                if (cx_value == 0) return std::unexpected(straight_line_compile_error{"INT 21h/AH=3Fh read with zero count"});
+                if (!ts.read_payloads.count(static_cast<std::uint16_t>(bx_constant))) {
+                    return std::unexpected(straight_line_compile_error{"INT 21h/AH=3Fh read before open"});
+                }
+                const auto& bytes = ts.read_payloads[static_cast<std::uint16_t>(bx_constant)];
+                std::uint16_t copied = 0;
+                for (std::uint16_t index = 0; index < cx_value; ++index) {
+                    if (index >= bytes.size()) break;
+                    const auto stored = ts.memory.write8(dx_value + index, static_cast<std::uint8_t>(bytes[index]));
+                    if (!stored) return std::unexpected(straight_line_compile_error{"cannot write INT 21h/AH=3Fh buffer"});
+                    ++copied;
+                }
+                ts.registers[static_cast<std::size_t>(decoder::register_name::ax)] = copied;
+                (void)ts.ssa.define_constant(ts.state, ir::register_id::ax, copied);
                 position += decoded->size;
                 continue;
             }
