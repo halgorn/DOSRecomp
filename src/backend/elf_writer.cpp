@@ -146,4 +146,119 @@ elf_writer::emit_syscall_program_executable(std::span<const write_call> writes,
     return image;
 }
 
+namespace {
+constexpr std::size_t per_open_code_size = 24;
+constexpr std::size_t per_close_code_size = 12;
+constexpr std::size_t fd_move_code_size = 3;
+
+void emit_open_block(std::vector<std::byte>& image, std::size_t code_offset, std::size_t path_offset,
+                     const open_call& call) {
+    const auto displacement = static_cast<std::int32_t>(path_offset) - static_cast<std::int32_t>(code_offset + 12);
+    const std::array<std::byte, per_open_code_size> code = {
+        std::byte{0xb8}, std::byte{2}, std::byte{0}, std::byte{0}, std::byte{0},
+        std::byte{0x48}, std::byte{0x8d}, std::byte{0x3d},
+        static_cast<std::byte>(displacement & 0xffU), static_cast<std::byte>((displacement >> 8U) & 0xffU),
+        static_cast<std::byte>((displacement >> 16U) & 0xffU), static_cast<std::byte>((displacement >> 24U) & 0xffU),
+        std::byte{0xbe}, static_cast<std::byte>(call.flags & 0xffU), static_cast<std::byte>((call.flags >> 8U) & 0xffU),
+        static_cast<std::byte>((call.flags >> 16U) & 0xffU), static_cast<std::byte>((call.flags >> 24U) & 0xffU),
+        std::byte{0xba}, static_cast<std::byte>(call.mode & 0xffU), static_cast<std::byte>((call.mode >> 8U) & 0xffU),
+        static_cast<std::byte>((call.mode >> 16U) & 0xffU), static_cast<std::byte>((call.mode >> 24U) & 0xffU),
+        std::byte{0x0f}, std::byte{0x05},
+    };
+    std::copy(code.begin(), code.end(), image.begin() + static_cast<std::ptrdiff_t>(code_offset));
+    std::copy(call.filename.begin(), call.filename.end(), image.begin() + static_cast<std::ptrdiff_t>(path_offset));
+    image[static_cast<std::ptrdiff_t>(path_offset) + static_cast<std::ptrdiff_t>(call.filename.size())] = std::byte{0};
+}
+
+void emit_close_block(std::vector<std::byte>& image, std::size_t code_offset, const close_call& call) {
+    const std::array<std::byte, per_close_code_size> code = {
+        std::byte{0xb8}, std::byte{3}, std::byte{0}, std::byte{0}, std::byte{0},
+        std::byte{0xbf}, static_cast<std::byte>(call.file_descriptor & 0xffU),
+        static_cast<std::byte>((call.file_descriptor >> 8U) & 0xffU),
+        static_cast<std::byte>((call.file_descriptor >> 16U) & 0xffU),
+        static_cast<std::byte>((call.file_descriptor >> 24U) & 0xffU),
+        std::byte{0x0f}, std::byte{0x05},
+    };
+    std::copy(code.begin(), code.end(), image.begin() + static_cast<std::ptrdiff_t>(code_offset));
+}
+
+void emit_fd_move(std::vector<std::byte>& image, std::size_t code_offset) {
+    const std::array<std::byte, fd_move_code_size> code = {
+        std::byte{0x48}, std::byte{0x89}, std::byte{0xc7},
+    };
+    std::copy(code.begin(), code.end(), image.begin() + static_cast<std::ptrdiff_t>(code_offset));
+}
+
+std::size_t action_payload_size(const syscall_action& action) {
+    switch (action.kind) {
+    case syscall_action::kind::write: return action.write.payload.size();
+    case syscall_action::kind::read: return action.read.max_bytes;
+    case syscall_action::kind::open: return action.open.filename.size() + 1;
+    case syscall_action::kind::close: return 0;
+    }
+    return 0;
+}
+
+std::size_t action_code_size(const syscall_action& action, bool emit_fd_move_after) {
+    std::size_t base = 0;
+    switch (action.kind) {
+    case syscall_action::kind::write: base = per_write_code_size; break;
+    case syscall_action::kind::read: base = per_read_code_size; break;
+    case syscall_action::kind::open: base = per_open_code_size; break;
+    case syscall_action::kind::close: base = per_close_code_size; break;
+    }
+    if (emit_fd_move_after && (action.kind == syscall_action::kind::open)) base += fd_move_code_size;
+    return base;
+}
+}
+
+std::vector<std::byte>
+elf_writer::emit_action_program_executable(std::span<const syscall_action> actions, std::uint8_t exit_code) {
+    std::size_t code_size = exit_code_size;
+    std::size_t total_payload = 0;
+    for (std::size_t index = 0; index < actions.size(); ++index) {
+        const bool needs_fd_move = actions[index].kind == syscall_action::kind::open;
+        code_size += action_code_size(actions[index], needs_fd_move);
+        total_payload += action_payload_size(actions[index]);
+    }
+    const auto payload_start = code_offset + code_size;
+    std::vector<std::byte> image(payload_start + total_payload);
+    emit_elf_header(image, code_size);
+    std::size_t current_code = code_offset;
+    std::size_t current_payload = payload_start;
+    for (std::size_t index = 0; index < actions.size(); ++index) {
+        const auto& action = actions[index];
+        const bool needs_fd_move = action.kind == syscall_action::kind::open;
+        switch (action.kind) {
+        case syscall_action::kind::write:
+            emit_write_block(image, current_code, current_payload, action.write);
+            current_payload += action.write.payload.size();
+            break;
+        case syscall_action::kind::read:
+            emit_read_block(image, current_code, current_payload, action.read);
+            current_payload += action.read.max_bytes;
+            break;
+        case syscall_action::kind::open:
+            emit_open_block(image, current_code, current_payload, action.open);
+            current_payload += action.open.filename.size() + 1;
+            break;
+        case syscall_action::kind::close:
+            emit_close_block(image, current_code, action.close);
+            break;
+        }
+        current_code += action_code_size(action, false);
+        if (needs_fd_move) {
+            emit_fd_move(image, current_code);
+            current_code += fd_move_code_size;
+        }
+    }
+    const std::array<std::byte, exit_code_size> code = {
+        std::byte{0xb8}, std::byte{0x3c}, std::byte{0}, std::byte{0}, std::byte{0},
+        std::byte{0xbf}, static_cast<std::byte>(exit_code), std::byte{0}, std::byte{0}, std::byte{0},
+        std::byte{0x0f}, std::byte{0x05},
+    };
+    std::copy(code.begin(), code.end(), image.begin() + static_cast<std::ptrdiff_t>(current_code));
+    return image;
+}
+
 } // namespace dosrecomp::backend

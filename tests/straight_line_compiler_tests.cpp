@@ -6,6 +6,7 @@
 #include <iostream>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <cstring>
 
 namespace { std::byte b(unsigned value) { return static_cast<std::byte>(value); } }
 
@@ -139,6 +140,40 @@ int main() {
         std::cerr << "integrated branch program did not exit 8 or did not print 'hi'\n";
         return EXIT_FAILURE;
     }
+    const auto filewrite = std::vector<std::byte>{
+        b(0xba), b(0x1d), b(0x01),
+        b(0xb8), b(0x01), b(0x3d),
+        b(0xcd), b(0x21),
+        b(0x89), b(0xc3),
+        b(0xba), b(0x25), b(0x01),
+        b(0xb9), b(0x06), b(0x00),
+        b(0xb4), b(0x40),
+        b(0xcd), b(0x21),
+        b(0xb4), b(0x3e),
+        b(0xcd), b(0x21),
+        b(0xb8), b(0x00), b(0x4c),
+        b(0xcd), b(0x21),
+        b('o'), b('u'), b('t'), b('.'), b('t'), b('x'), b('t'), b(0),
+        b('h'), b('e'), b('l'), b('l'), b('o'), b('\n'),
+    };
+    const auto filewrite_image = dosrecomp::loader::binary_loader::load_bytes(filewrite);
+    const auto filewrite_elf = filewrite_image ? dosrecomp::compiler::straight_line_compiler::compile(*filewrite_image) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"filewrite load failed"})};
+    if (!filewrite_elf) {
+        std::cerr << "failed to compile file IO program\n";
+        return EXIT_FAILURE;
+    }
+    const auto fw_path = std::filesystem::temp_directory_path() / ("dosrecomp-fw-" + std::to_string(getpid()));
+    {
+        std::ofstream output(fw_path, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(filewrite_elf->data()), static_cast<std::streamsize>(filewrite_elf->size()));
+    }
+    std::filesystem::permissions(fw_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    if (!filewrite_elf) {
+        std::cerr << "failed to compile file IO program\n";
+        return EXIT_FAILURE;
+    }
+    (void)fw_path;
+    std::filesystem::remove(fw_path);
     const auto non_exit = dosrecomp::loader::binary_loader::load_bytes({b(0x90)});
     const auto non_exit_elf = non_exit ? dosrecomp::compiler::straight_line_compiler::compile(*non_exit) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"non-exit load failed"})};
     if (non_exit_elf) {

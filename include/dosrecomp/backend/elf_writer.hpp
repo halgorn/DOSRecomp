@@ -20,6 +20,29 @@ struct read_call {
     std::uint32_t max_bytes{1};
 };
 
+/** A single open(path, flags, mode) syscall embedded in a generated executable. */
+struct open_call {
+    std::span<const std::byte> filename;
+    std::uint32_t flags{0x41};
+    std::uint32_t mode{0x1ff};
+};
+
+/** A single close(fd) syscall embedded in a generated executable. */
+struct close_call {
+    std::uint32_t file_descriptor{0};
+};
+
+/** A descriptor for one syscall invocation in a generated executable. */
+struct syscall_action {
+    enum class kind { write, read, open, close } kind;
+    union {
+        write_call write{};
+        read_call read;
+        open_call open;
+        close_call close;
+    };
+};
+
 /** Emits a standalone ELF64 executable that terminates through Linux syscall exit. */
 class elf_writer final {
 public:
@@ -41,6 +64,15 @@ public:
     [[nodiscard]] static std::vector<std::byte>
     emit_syscall_program_executable(std::span<const write_call> writes,
                                     std::span<const read_call> reads,
+                                    std::uint8_t exit_code);
+
+    /**
+     * Emits an ELF64 executable driven by an arbitrary sequence of file
+     * syscalls followed by an exit. The fd returned by an open action is
+     * threaded into the next write/close action via a register move.
+     */
+    [[nodiscard]] static std::vector<std::byte>
+    emit_action_program_executable(std::span<const syscall_action> actions,
                                     std::uint8_t exit_code);
 };
 

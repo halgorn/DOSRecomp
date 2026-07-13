@@ -6,6 +6,17 @@
 
 namespace dosrecomp::semantics {
 namespace {
+[[nodiscard]] std::uint16_t compute_operation(ir::operation_kind op, std::uint16_t a, std::uint16_t b) {
+    switch (op) {
+    case ir::operation_kind::add: return static_cast<std::uint16_t>(a + b);
+    case ir::operation_kind::subtract: return static_cast<std::uint16_t>(a - b);
+    case ir::operation_kind::bit_and: return static_cast<std::uint16_t>(a & b);
+    case ir::operation_kind::bit_or: return static_cast<std::uint16_t>(a | b);
+    case ir::operation_kind::bit_xor: return static_cast<std::uint16_t>(a ^ b);
+    default: return 0;
+    }
+}
+
 [[nodiscard]] std::optional<ir::operation_kind> operation_for(decoder::alu_operation operation) {
     switch (operation) {
     case decoder::alu_operation::add: return ir::operation_kind::add;
@@ -61,15 +72,44 @@ namespace {
     }
 }
 void store_concrete(ir::register_id reg, std::uint16_t value, decoder::register_values& values) {
+    auto merge_into_word = [&](decoder::register_name high_byte, decoder::register_name low_byte, decoder::register_name word_reg) {
+        const auto high = values[static_cast<std::size_t>(high_byte)];
+        const auto low = values[static_cast<std::size_t>(low_byte)];
+        values[static_cast<std::size_t>(word_reg)] = static_cast<std::uint16_t>((high << 8U) | low);
+    };
     switch (reg) {
-    case ir::register_id::al: values[static_cast<std::size_t>(decoder::register_name::al)] = static_cast<std::uint8_t>(value); break;
-    case ir::register_id::cl: values[static_cast<std::size_t>(decoder::register_name::cl)] = static_cast<std::uint8_t>(value); break;
-    case ir::register_id::dl: values[static_cast<std::size_t>(decoder::register_name::dl)] = static_cast<std::uint8_t>(value); break;
-    case ir::register_id::bl: values[static_cast<std::size_t>(decoder::register_name::bl)] = static_cast<std::uint8_t>(value); break;
-    case ir::register_id::ah: values[static_cast<std::size_t>(decoder::register_name::ah)] = static_cast<std::uint8_t>(value); break;
-    case ir::register_id::ch: values[static_cast<std::size_t>(decoder::register_name::ch)] = static_cast<std::uint8_t>(value); break;
-    case ir::register_id::dh: values[static_cast<std::size_t>(decoder::register_name::dh)] = static_cast<std::uint8_t>(value); break;
-    case ir::register_id::bh: values[static_cast<std::size_t>(decoder::register_name::bh)] = static_cast<std::uint8_t>(value); break;
+    case ir::register_id::al:
+        values[static_cast<std::size_t>(decoder::register_name::al)] = static_cast<std::uint8_t>(value);
+        merge_into_word(decoder::register_name::ah, decoder::register_name::al, decoder::register_name::ax);
+        break;
+    case ir::register_id::cl:
+        values[static_cast<std::size_t>(decoder::register_name::cl)] = static_cast<std::uint8_t>(value);
+        merge_into_word(decoder::register_name::ch, decoder::register_name::cl, decoder::register_name::cx);
+        break;
+    case ir::register_id::dl:
+        values[static_cast<std::size_t>(decoder::register_name::dl)] = static_cast<std::uint8_t>(value);
+        merge_into_word(decoder::register_name::dh, decoder::register_name::dl, decoder::register_name::dx);
+        break;
+    case ir::register_id::bl:
+        values[static_cast<std::size_t>(decoder::register_name::bl)] = static_cast<std::uint8_t>(value);
+        merge_into_word(decoder::register_name::bh, decoder::register_name::bl, decoder::register_name::bx);
+        break;
+    case ir::register_id::ah:
+        values[static_cast<std::size_t>(decoder::register_name::ah)] = static_cast<std::uint8_t>(value);
+        merge_into_word(decoder::register_name::ah, decoder::register_name::al, decoder::register_name::ax);
+        break;
+    case ir::register_id::ch:
+        values[static_cast<std::size_t>(decoder::register_name::ch)] = static_cast<std::uint8_t>(value);
+        merge_into_word(decoder::register_name::ch, decoder::register_name::cl, decoder::register_name::cx);
+        break;
+    case ir::register_id::dh:
+        values[static_cast<std::size_t>(decoder::register_name::dh)] = static_cast<std::uint8_t>(value);
+        merge_into_word(decoder::register_name::dh, decoder::register_name::dl, decoder::register_name::dx);
+        break;
+    case ir::register_id::bh:
+        values[static_cast<std::size_t>(decoder::register_name::bh)] = static_cast<std::uint8_t>(value);
+        merge_into_word(decoder::register_name::bh, decoder::register_name::bl, decoder::register_name::bx);
+        break;
     case ir::register_id::ax: values[static_cast<std::size_t>(decoder::register_name::ax)] = value; break;
     case ir::register_id::bx: values[static_cast<std::size_t>(decoder::register_name::bx)] = value; break;
     case ir::register_id::cx: values[static_cast<std::size_t>(decoder::register_name::cx)] = value; break;
@@ -109,7 +149,16 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
         }
         const auto result_register = (*operation == ir::operation_kind::compare || *operation == ir::operation_kind::test)
             ? ir::register_id::flags : *destination;
-        return semantic_effect{result_register, ssa.define_operation(state, result_register, *operation, {input, source_value}), std::nullopt, std::nullopt};
+        const auto result_ssa = ssa.define_operation(state, result_register, *operation, {input, source_value});
+        if (registers) {
+            const auto& input_actual = ssa.values()[input];
+            const auto& source_actual = ssa.values()[source_value];
+            if (input_actual.constant && source_actual.constant) {
+                const auto op_result = compute_operation(*operation, *input_actual.constant, *source_actual.constant);
+                if (result_register != ir::register_id::flags) store_concrete(result_register, op_result, *registers);
+            }
+        }
+        return semantic_effect{result_register, result_ssa, std::nullopt, std::nullopt};
     }
     if (instruction.kind == decoder::instruction_kind::call && instruction.size == 3) {
         if (!registers || !memory) return std::unexpected(translation_error{"CALL requires concrete register and memory state"});
@@ -207,22 +256,31 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
         if (is_byte) {
             const auto value = memory->read8(default_segment, *offset);
             if (!value) return std::unexpected(translation_error{std::string{"cannot read MOV memory source: "} + value.error().message});
+            if (registers) store_concrete(*destination, *value, *registers);
             return semantic_effect{*destination, ssa.define_constant(state, *destination, *value), *value,
                 memory_access{false, physical, op_width}};
         }
         const auto value = memory->read16(default_segment, *offset);
         if (!value) return std::unexpected(translation_error{std::string{"cannot read MOV memory source: "} + value.error().message});
+        if (registers) store_concrete(*destination, *value, *registers);
         return semantic_effect{*destination, ssa.define_constant(state, *destination, *value), *value,
             memory_access{false, physical, op_width}};
     }
     if (source_operand.kind == decoder::operand_kind::immediate) {
         const auto immediate = source_operand.immediate;
-        return semantic_effect{*destination, ssa.define_constant(state, *destination, immediate), immediate, std::nullopt};
+        const auto new_ssa = ssa.define_constant(state, *destination, immediate);
+        if (registers) store_concrete(*destination, immediate, *registers);
+        return semantic_effect{*destination, new_ssa, immediate, std::nullopt};
     }
     const auto source = register_for(source_operand.reg);
     if (!source) return std::unexpected(translation_error{"MOV source is not an SSA register"});
     const auto source_value = state.values[static_cast<std::size_t>(*source)];
-    return semantic_effect{*destination, ssa.define(state, *destination, {source_value}), std::nullopt, std::nullopt};
+    const auto new_ssa = ssa.define(state, *destination, {source_value});
+    if (registers) {
+        const auto& source_actual = ssa.values()[source_value];
+        if (source_actual.constant) store_concrete(*destination, *source_actual.constant, *registers);
+    }
+    return semantic_effect{*destination, new_ssa, std::nullopt, std::nullopt};
 }
 
 } // namespace dosrecomp::semantics

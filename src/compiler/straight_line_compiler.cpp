@@ -8,6 +8,7 @@
 #include "dosrecomp/runtime/real_mode_memory.hpp"
 #include "dosrecomp/semantics/instruction_translator.hpp"
 
+#include <unordered_map>
 #include <vector>
 
 namespace dosrecomp::compiler {
@@ -64,6 +65,9 @@ struct translation_state {
     runtime::real_mode_memory memory;
     std::vector<std::vector<std::byte>> write_payloads;
     std::vector<backend::write_call> writes;
+    std::vector<backend::syscall_action> actions;
+    std::uint32_t next_fake_handle{3};
+    std::unordered_map<std::uint16_t, std::uint32_t> handle_for_bx;
     std::vector<bool> visited_block;
 };
 
@@ -82,22 +86,88 @@ translate_block(const loader::program_image& image, const cfg::control_flow_grap
             if (decoded->interrupt_number != 0x21 && decoded->interrupt_number != 0x10U) {
                 return std::unexpected(straight_line_compile_error{"unsupported interrupt " + std::to_string(decoded->interrupt_number) + "h"});
             }
-            const auto ah_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::ah)];
-            const auto ah_constant = resolve_exit_code(ts.ssa, ts.state, ah_ssa);
-            const auto ax_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::ax)];
-            const auto ax_constant = resolve_exit_code(ts.ssa, ts.state, ax_ssa);
-            const auto ah_value = ah_constant != 0 || ah_ssa == ax_ssa ? static_cast<std::uint8_t>(ah_constant) : static_cast<std::uint8_t>(ax_constant >> 8U);
+            const auto ax_value = ts.registers[static_cast<std::size_t>(decoder::register_name::ax)];
+            const auto ah_value = static_cast<std::uint8_t>(ax_value >> 8U);
+            const auto al_value = static_cast<std::uint8_t>(ax_value & 0xffU);
             if (ah_value == 0x4cU) {
-                const auto al_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::al)];
-                const auto al_constant = resolve_exit_code(ts.ssa, ts.state, al_ssa);
-                if (al_constant != 0 || al_ssa == ax_ssa) return static_cast<std::uint8_t>(al_constant);
-                return static_cast<std::uint8_t>(ax_constant & 0xffU);
+                return al_value;
+            }
+            if (ah_value == 0x3dU) {
+                const auto dx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::dx)];
+                const auto dx_value = resolve_exit_code(ts.ssa, ts.state, dx_ssa);
+                std::vector<std::byte> filename;
+                std::size_t cursor = dx_value;
+                while (cursor + 1 <= ts.memory.size) {
+                    const auto value = ts.memory.read8(cursor);
+                    if (!value) return std::unexpected(straight_line_compile_error{"cannot read INT 21h/AH=3Dh filename"});
+                    if (*value == 0) break;
+                    filename.push_back(static_cast<std::byte>(*value));
+                    ++cursor;
+                }
+                if (cursor + 1 > ts.memory.size) return std::unexpected(straight_line_compile_error{"INT 21h/AH=3Dh filename is missing NUL terminator"});
+                std::uint32_t flags = 0;
+                switch (al_value) {
+                case 0: flags = 0; break;
+                case 1: flags = 0x41; break;
+                case 2: flags = 0x42; break;
+                default: return std::unexpected(straight_line_compile_error{"unsupported INT 21h/AH=3Dh access mode"});
+                }
+                ts.write_payloads.push_back(std::move(filename));
+                backend::syscall_action action{};
+                action.kind = backend::syscall_action::kind::open;
+                action.open.filename = std::span<const std::byte>{ts.write_payloads.back().data(), ts.write_payloads.back().size()};
+                action.open.flags = flags;
+                action.open.mode = 0x1ff;
+                ts.actions.push_back(action);
+                const auto fake_handle = ts.next_fake_handle++;
+                ts.registers[static_cast<std::size_t>(decoder::register_name::ax)] = static_cast<std::uint16_t>(fake_handle);
+                ts.registers[static_cast<std::size_t>(decoder::register_name::bx)] = static_cast<std::uint16_t>(fake_handle);
+                (void)ts.ssa.define_constant(ts.state, ir::register_id::ax, static_cast<std::uint16_t>(fake_handle));
+                (void)ts.ssa.define_constant(ts.state, ir::register_id::bx, static_cast<std::uint16_t>(fake_handle));
+                ts.handle_for_bx[static_cast<std::uint16_t>(fake_handle)] = fake_handle;
+                position += decoded->size;
+                continue;
+            }
+            if (ah_value == 0x3eU) {
+                const auto bx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::bx)];
+                const auto bx_constant = resolve_exit_code(ts.ssa, ts.state, bx_ssa);
+                const auto real_fd = ts.handle_for_bx.find(static_cast<std::uint16_t>(bx_constant));
+                if (real_fd == ts.handle_for_bx.end()) return std::unexpected(straight_line_compile_error{"INT 21h/AH=3Eh close on unknown file handle"});
+                backend::syscall_action action{};
+                action.kind = backend::syscall_action::kind::close;
+                action.close.file_descriptor = real_fd->second;
+                ts.actions.push_back(action);
+                ts.handle_for_bx.erase(real_fd);
+                position += decoded->size;
+                continue;
+            }
+            if (ah_value == 0x40U) {
+                const auto bx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::bx)];
+                const auto bx_constant = resolve_exit_code(ts.ssa, ts.state, bx_ssa);
+                const auto cx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::cx)];
+                const auto cx_value = resolve_exit_code(ts.ssa, ts.state, cx_ssa);
+                const auto dx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::dx)];
+                const auto dx_value = resolve_exit_code(ts.ssa, ts.state, dx_ssa);
+                const auto real_fd = ts.handle_for_bx.find(static_cast<std::uint16_t>(bx_constant));
+                if (real_fd == ts.handle_for_bx.end()) return std::unexpected(straight_line_compile_error{"INT 21h/AH=40h write on unknown file handle"});
+                std::vector<std::byte> payload;
+                for (std::uint16_t index = 0; index < cx_value; ++index) {
+                    const auto value = ts.memory.read8(dx_value + index);
+                    if (!value) return std::unexpected(straight_line_compile_error{"cannot read INT 21h/AH=40h buffer"});
+                    payload.push_back(static_cast<std::byte>(*value));
+                }
+                ts.write_payloads.push_back(std::move(payload));
+                backend::syscall_action action{};
+                action.kind = backend::syscall_action::kind::write;
+                action.write.payload = std::span<const std::byte>{ts.write_payloads.back().data(), ts.write_payloads.back().size()};
+                action.write.file_descriptor = real_fd->second;
+                ts.actions.push_back(action);
+                position += decoded->size;
+                continue;
             }
             if (decoded->interrupt_number == 0x10U) {
                 if (ah_value == 0x0eU) {
-                    const auto al_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::al)];
-                    const auto al_constant = resolve_exit_code(ts.ssa, ts.state, al_ssa);
-                    ts.write_payloads.push_back({{static_cast<std::byte>(al_constant & 0xffU)}});
+                    ts.write_payloads.push_back({{static_cast<std::byte>(al_value)}});
                     ts.writes.push_back(backend::write_call{std::span<const std::byte>{ts.write_payloads.back().data(), 1}, 1});
                     position += decoded->size;
                     continue;
@@ -224,6 +294,9 @@ straight_line_compiler::compile(const loader::program_image& image) {
     }
     const auto exit_code = translate_block(image, *graph, 0, ts);
     if (!exit_code) return std::unexpected(exit_code.error());
+    if (!ts.actions.empty()) {
+        return backend::elf_writer::emit_action_program_executable(std::span<const backend::syscall_action>{ts.actions.data(), ts.actions.size()}, *exit_code);
+    }
     if (ts.writes.empty()) return backend::elf_writer::emit_exit_executable(*exit_code);
     return backend::elf_writer::emit_multi_write_exit_executable(std::span<const backend::write_call>{ts.writes.data(), ts.writes.size()}, *exit_code);
 }
@@ -287,7 +360,8 @@ straight_line_compiler::emit_llvm(const loader::program_image& image) {
                 if (v.inputs.empty()) break;
                 cursor = v.inputs.front();
             }
-            exit_code_value = al_const != 0 || al_ssa == ax_ssa ? static_cast<std::uint8_t>(al_const) : static_cast<std::uint8_t>(ax_const & 0xffU);
+            const auto ax_used = registers[static_cast<std::size_t>(decoder::register_name::ax)];
+            exit_code_value = al_const != 0 || al_ssa == ax_ssa ? static_cast<std::uint8_t>(al_const) : static_cast<std::uint8_t>(ax_used & 0xffU);
             saw_exit = true;
             break;
         }
