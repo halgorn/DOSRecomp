@@ -56,6 +56,9 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
     if (opcode >= 0x91 && opcode <= 0x97) return instruction{instruction_kind::move, offset, 1, 0, 0};
     if (opcode == 0xd7) return instruction{instruction_kind::move, offset, 1, 0, 0};
     if (opcode == 0x98 || opcode == 0x99) return instruction{instruction_kind::arithmetic, offset, 1, 0, 0};
+    if (opcode == 0x27 || opcode == 0x2f || opcode == 0x37 || opcode == 0x3f) {
+        return instruction{instruction_kind::arithmetic, offset, 1, 0, 0};
+    }
     if (opcode == 0xd4 || opcode == 0xd5) {
         if (code.size() - offset < 2) return truncated(offset);
         return instruction{instruction_kind::arithmetic, offset, 2, 0, 0};
@@ -67,6 +70,9 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
     if (opcode == 0xf4 || opcode == 0xf5 || (opcode >= 0xf8 && opcode <= 0xfd)) {
         return instruction{instruction_kind::flags, offset, 1, 0, 0};
     }
+    if (opcode == 0x9e || opcode == 0x9f) return instruction{instruction_kind::flags, offset, 1, 0, 0};
+    if (opcode == 0x9c || opcode == 0x9d || opcode == 0x0f) return instruction{instruction_kind::stack, offset, 1, 0, 0};
+    if (opcode == 0x9b) return instruction{instruction_kind::nop, offset, 1, 0, 0};
     if ((opcode >= 0xa4 && opcode <= 0xa7) || (opcode >= 0xaa && opcode <= 0xaf)) {
         return instruction{instruction_kind::string, offset, 1, 0, 0};
     }
@@ -136,6 +142,11 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         if (!size) return std::unexpected(size.error());
         const auto extension = (byte_at(code, offset + 1) >> 3U) & 0x07U;
         if (extension > 1) return std::unexpected(decode_error{"unsupported FE group extension"});
+        return instruction{instruction_kind::arithmetic, offset, *size, 0, 0};
+    }
+    if (opcode >= 0xd0 && opcode <= 0xd3) {
+        const auto size = modrm_size(code, offset + 1, 0);
+        if (!size) return std::unexpected(size.error());
         return instruction{instruction_kind::arithmetic, offset, *size, 0, 0};
     }
     if (opcode == 0xcd) {
