@@ -69,7 +69,7 @@ target_include_directories(dosrecomp_optimizer PUBLIC $<BUILD_INTERFACE:${CMAKE_
 target_link_libraries(dosrecomp_optimizer PUBLIC dosrecomp::ir)
 target_compile_options(dosrecomp_optimizer PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
-add_library(dosrecomp_compiler src/compiler/exit_program_compiler.cpp src/compiler/straight_line_compiler.cpp)
+add_library(dosrecomp_compiler src/compiler/exit_program_compiler.cpp src/compiler/straight_line_compiler.cpp src/compiler/branching_compiler.cpp)
 add_library(dosrecomp::compiler ALIAS dosrecomp_compiler)
 target_compile_features(dosrecomp_compiler PUBLIC cxx_std_23)
 target_include_directories(dosrecomp_compiler PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
