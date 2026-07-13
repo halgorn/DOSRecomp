@@ -44,3 +44,8 @@ explicit `stop`, `jump`, or `branch` terminators. It deliberately contains no
 machine-dependent operands; instruction-to-SSA lowering will add typed values
 and phi nodes above this verified control-flow foundation. The module depends
 only on CFG and rejects dangling or ambiguous successor relationships.
+
+`register_ssa_builder` models the nine 8086 architectural registers as
+immutable versions. It introduces entry values, definitions, and phi values at
+control-flow joins. Instruction semantics will use this builder to translate
+register reads and writes without mutating historical values.
