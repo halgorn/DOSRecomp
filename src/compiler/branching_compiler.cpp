@@ -68,69 +68,44 @@ constexpr std::size_t word_reg_index(decoder::register_name r) {
 }
 
 void emit_runtime_header(std::ostream& out) {
-    out << "#include <cstdint>\n";
-    out << "#include <cstdio>\n";
-    out << "#include <cstdlib>\n";
-    out << "#include <ctime>\n";
-    out << "#include <fcntl.h>\n";
-    out << "#include <sys/syscall.h>\n";
-    out << "#include <unistd.h>\n";
-    out << "\n";
-    out << "static uint16_t regs[20] = {0};\n";
-    out << "static uint8_t mem[" << std::hex << dos_memory_size << std::dec << "] = {0};\n";
-    out << "static uint32_t flags = 0;\n";
-    out << "static int next_fake_handle = 3;\n";
-    out << "static int handle_to_fd[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};\n";
-    out << "static uint16_t call_stack[256] = {0};\n";
-    out << "static int call_sp = 0;\n";
-    out << "\n";
-    out << "static inline void update_flags_cmp(uint16_t a, uint16_t b, bool is_byte) {\n";
-    out << "    if (is_byte) { uint8_t aa = static_cast<uint8_t>(a), bb = static_cast<uint8_t>(b);\n";
-    out << "      uint8_t r = static_cast<uint8_t>(aa - bb);\n";
-    out << "      flags = (aa == bb ? 0x40u : 0u) | ((r & 0x80) ? 0x80u : 0u) | (aa < bb ? 1u : 0u); }\n";
-    out << "    else { uint16_t r = static_cast<uint16_t>(a - b);\n";
-    out << "      flags = (a == b ? 0x40u : 0u) | ((r & 0x8000) ? 0x8000u : 0u) | (a < b ? 1u : 0u); }\n";
-    out << "}\n";
-    out << "static void dispatch(uint32_t target);\n";
+    out << "#include <cstdint>\n#include <cstdio>\n#include <cstdlib>\n#include <ctime>\n"
+        << "#include <fcntl.h>\n#include <sys/syscall.h>\n#include <unistd.h>\n\n"
+        << "static uint16_t regs[20] = {0}; static uint8_t mem[" << std::hex << dos_memory_size << std::dec << "] = {0};\n"
+        << "static uint32_t flags = 0; static int next_fake_handle = 3;\n"
+        << "static int handle_to_fd[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};\n"
+        << "static uint16_t call_stack[256] = {0}; static int call_sp = 0;\n\n"
+        << "static inline void update_flags_cmp(uint16_t a, uint16_t b, bool is_byte) {\n"
+        << "    if (is_byte) { uint8_t aa = static_cast<uint8_t>(a), bb = static_cast<uint8_t>(b), r = static_cast<uint8_t>(aa - bb);\n"
+        << "      flags = (aa == bb ? 0x40u : 0u) | ((r & 0x80) ? 0x80u : 0u) | (aa < bb ? 1u : 0u); }\n"
+        << "    else { uint16_t r = static_cast<uint16_t>(a - b);\n"
+        << "      flags = (a == b ? 0x40u : 0u) | ((r & 0x8000) ? 0x8000u : 0u) | (a < b ? 1u : 0u); }\n}\n"
+        << "static void dispatch(uint32_t target);\n";
 }
 
 void emit_int21_runtime(std::ostream& out) {
-    out << "  {\n";
-    out << "    const uint16_t __ax = regs[0];\n";
-    out << "    const uint8_t ah = static_cast<uint8_t>(__ax >> 8);\n";
-    out << "    const uint8_t al = static_cast<uint8_t>(__ax & 0xff);\n";
+    out << "  { const uint16_t __ax = regs[0]; const uint8_t ah = static_cast<uint8_t>(__ax >> 8), al = static_cast<uint8_t>(__ax);\n";
     out << "    switch (ah) {\n";
     out << "    case 0x4c: syscall(SYS_exit, __ax & 0xff); return;\n";
-    out << "    case 0x02: { uint8_t ch = static_cast<uint8_t>(regs[2]);\n";
-    out << "      syscall(SYS_write, 1, &ch, 1); break; }\n";
-    out << "    case 0x09: { uint32_t base = (static_cast<uint32_t>(regs[11]) << 4) + regs[2];\n";
-    out << "      uint32_t len = 0; while (mem[base + len] != '$') ++len;\n";
-    out << "      syscall(SYS_write, 1, &mem[base], len); break; }\n";
+    out << "    case 0x02: { uint8_t ch = static_cast<uint8_t>(regs[2]); syscall(SYS_write, 1, &ch, 1); break; }\n";
+    out << "    case 0x09: { uint32_t base = (static_cast<uint32_t>(regs[11]) << 4) + regs[2], len = 0;\n";
+    out << "      while (mem[base + len] != '$') ++len; syscall(SYS_write, 1, &mem[base], len); break; }\n";
     out << "    case 0x01: { char ch = 0; long r = syscall(SYS_read, 0, &ch, 1);\n";
     out << "      if (r <= 0) { syscall(SYS_exit, 1); return; }\n";
-    out << "      regs[0] = (regs[0] & 0xff00) | static_cast<uint16_t>(static_cast<uint8_t>(ch)); break; }\n";
+    out << "      regs[0] = (regs[0] & 0xff00) | static_cast<uint16_t>(static_cast<std::uint8_t>(ch)); break; }\n";
     out << "    case 0x0a: { uint32_t base = (static_cast<uint32_t>(regs[11]) << 4) + regs[2];\n";
-    out << "      uint8_t cap = mem[base]; uint8_t idx = 1;\n";
+    out << "      uint8_t cap = mem[base], idx = 1;\n";
     out << "      while (idx <= cap) { char ch = 0; long r = syscall(SYS_read, 0, &ch, 1);\n";
-    out << "        if (r <= 0 || ch == '\\n') break;\n";
-    out << "        mem[base + idx] = static_cast<uint8_t>(ch); ++idx; }\n";
+    out << "        if (r <= 0 || ch == '\\n') break; mem[base + idx] = static_cast<uint8_t>(ch); ++idx; }\n";
     out << "      mem[base + 1] = idx - 1; regs[0] = idx - 1; break; }\n";
-    out << "    case 0x3d: { uint32_t base = (static_cast<uint32_t>(regs[11]) << 4) + regs[2];\n";
-    out << "      uint32_t len = 0; while (mem[base + len] != 0) ++len;\n";
-    out << "      int oflags = 0;\n";
-    out << "      switch (al) {\n";
-    out << "        case 0: oflags = O_RDONLY; break;\n";
-    out << "        case 1: oflags = O_WRONLY | O_CREAT | O_TRUNC; break;\n";
-    out << "        case 2: oflags = O_RDWR | O_CREAT; break;\n";
-    out << "        default: syscall(SYS_exit, 1); return;\n";
-    out << "      }\n";
+    out << "    case 0x3d: { uint32_t base = (static_cast<uint32_t>(regs[11]) << 4) + regs[2], len = 0;\n";
+    out << "      while (mem[base + len] != 0) ++len; int oflags = 0;\n";
+    out << "      if (al == 0) oflags = O_RDONLY; else if (al == 1) oflags = O_WRONLY | O_CREAT | O_TRUNC;\n";
+    out << "      else if (al == 2) oflags = O_RDWR | O_CREAT; else { syscall(SYS_exit, 1); return; }\n";
     out << "      int fd = open(reinterpret_cast<const char*>(&mem[base]), oflags, 0644);\n";
-    out << "      int handle = next_fake_handle++;\n";
-    out << "      if (handle < 16) handle_to_fd[handle] = fd;\n";
+    out << "      int handle = next_fake_handle++; if (handle < 16) handle_to_fd[handle] = fd;\n";
     out << "      regs[0] = handle; regs[3] = handle; break; }\n";
     out << "    case 0x3e: { int h = regs[3] & 0xff;\n";
-    out << "      if (h >= 3 && h < 16 && handle_to_fd[h] >= 0) { close(handle_to_fd[h]); handle_to_fd[h] = -1; }\n";
-    out << "      break; }\n";
+    out << "      if (h >= 3 && h < 16 && handle_to_fd[h] >= 0) { close(handle_to_fd[h]); handle_to_fd[h] = -1; } break; }\n";
     out << "    case 0x3f: { int h = regs[3] & 0xff; uint16_t cnt = regs[1];\n";
     out << "      uint32_t base = (static_cast<uint32_t>(regs[11]) << 4) + regs[2];\n";
     out << "      int src = (h >= 3 && h < 16) ? handle_to_fd[h] : 0;\n";
@@ -143,11 +118,8 @@ void emit_int21_runtime(std::ostream& out) {
     out << "    case 0x2a: case 0x2c: { struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);\n";
     out << "      struct tm tm; gmtime_r(&ts.tv_sec, &tm);\n";
     out << "      if (ah == 0x2a) regs[0] = static_cast<uint16_t>(((tm.tm_year + 1900 - 1980) << 9) | (tm.tm_mon << 5) | tm.tm_mday), regs[2] = 0;\n";
-    out << "      else regs[0] = static_cast<uint16_t>((tm.tm_hour << 8) | tm.tm_min), regs[2] = tm.tm_sec;\n";
-    out << "      break; }\n";
-    out << "    default: syscall(SYS_exit, 1); return;\n";
-    out << "    }\n";
-    out << "  }\n";
+    out << "      else regs[0] = static_cast<uint16_t>((tm.tm_hour << 8) | tm.tm_min), regs[2] = tm.tm_sec; break; }\n";
+    out << "    default: syscall(SYS_exit, 1); return;\n    }\n  }\n";
 }
 
 void emit_int10_runtime(std::ostream& out) {
@@ -188,7 +160,7 @@ void emit_int16_runtime(std::ostream& out) {
     const auto seg_reg = uses_bp ? decoder::register_name::ss : decoder::register_name::ds;
     const auto seg_index = static_cast<std::size_t>(seg_reg) - static_cast<std::size_t>(decoder::register_name::ax);
     std::ostringstream out;
-    out << "((static_cast<uint32_t>(regs[" << seg_index << "]) << 4) + static_cast<uint32_t>(static_cast<int32_t>(" << mem.displacement << ")";
+    out << "((static_cast<uint32_t>(regs[" << seg_index << "]) << 4) + static_cast<uint32_t>(" << mem.displacement;
     for (std::uint8_t i = 0; i < mem.address_register_count; ++i)
         out << " + regs[" << word_reg_index(mem.address_registers[i]) << "]";
     out << "))";
@@ -287,10 +259,41 @@ void emit_arithmetic(std::ostream& out, const decoder::instruction& decoded) {
 }
 
 [[nodiscard]] std::expected<void, branching_compile_error>
+emit_block_body(std::ostream& out, const loader::program_image& image, std::size_t start, std::size_t stop_before = 0);
+
+[[nodiscard]] std::expected<void, branching_compile_error>
 emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t start) {
     out << "static inline __attribute__((always_inline)) void " << block_label(start) << "() {\n";
+    std::size_t loop_end = 0; decoder::branch_condition loop_cond{};
+    for (std::size_t scan = start; scan < image.bytes.size(); ) {
+        const auto probe = decoder::instruction_decoder::decode_at(image.bytes, scan);
+        if (!probe) break;
+        const auto next = scan + probe->size;
+        const bool term = probe->kind == decoder::instruction_kind::jump || probe->kind == decoder::instruction_kind::conditional_jump
+            || probe->kind == decoder::instruction_kind::return_ || probe->kind == decoder::instruction_kind::interrupt
+            || probe->kind == decoder::instruction_kind::call;
+        if (term && probe->kind == decoder::instruction_kind::conditional_jump && scan != start
+            && static_cast<std::size_t>(next + probe->relative_target) == start) { loop_end = scan; loop_cond = probe->condition; }
+        if (term) break;
+        scan = next;
+    }
+    if (loop_end != 0) {
+        out << "  do {\n";
+        const auto body_result = emit_block_body(out, image, start, loop_end);
+        if (!body_result) return body_result;
+        out << "  } while (";
+        if (!emit_conditional(out, loop_cond)) out << "false";
+        out << ");\n";
+    } else { const auto body_result = emit_block_body(out, image, start); if (!body_result) return body_result; }
+    out << "}\n\n";
+    return {};
+}
+
+[[nodiscard]] std::expected<void, branching_compile_error>
+emit_block_body(std::ostream& out, const loader::program_image& image, std::size_t start, std::size_t stop_before) {
     std::size_t position = start;
     while (position < image.bytes.size()) {
+        if (stop_before != 0 && position == stop_before) break;
         const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, position);
         if (!decoded) return std::unexpected(branching_compile_error{std::string{"cannot decode at "} + std::to_string(position) + ": " + decoded.error().message});
         const auto next = position + decoded->size;
@@ -344,9 +347,8 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
             position = next;
             break;
         }
-        position = next;
+position = next;
     }
-    out << "}\n\n";
     return {};
 }
 
@@ -404,8 +406,7 @@ void emit_image_array(std::ostream& out, const std::vector<std::byte>& bytes) {
 
 [[nodiscard]] std::expected<void, branching_compile_error>
 write_main(std::ostream& out, const loader::program_image& image) {
-    out << "int main() {\n";
-    out << "  regs[4] = 0xfffe;\n";
+    out << "int main() {\n  regs[4] = 0xfffe;\n";
     if (image.format == loader::executable_format::mz) {
         const auto base = static_cast<std::uint32_t>(image.entry_point.segment) * 16U;
         const auto seg = image.entry_point.segment;
@@ -422,9 +423,7 @@ write_main(std::ostream& out, const loader::program_image& image) {
         emit_image_array(out, image.bytes);
         out << "  for (size_t i = 0; i < sizeof(img); ++i) mem[0x100 + i] = img[i];\n";
     }
-    out << "  " << block_label(image.entry_offset()) << "();\n";
-    out << "  return 0;\n";
-    out << "}\n";
+    out << "  " << block_label(image.entry_offset()) << "();\n  return 0;\n}\n";
     return {};
 }
 

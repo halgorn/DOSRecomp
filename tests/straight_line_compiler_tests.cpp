@@ -306,5 +306,28 @@ int main() {
         std::cerr << "CALL/RET program did not exit 7\n";
         return EXIT_FAILURE;
     }
+    const auto loop_program = std::vector<std::byte>{
+        b(0xb9), b(0x05), b(0x00),
+        b(0x49),
+        b(0x75), b(0xfd),
+        b(0xb4), b(0x4c),
+        b(0x88), b(0xc8),
+        b(0xcd), b(0x21),
+    };
+    const auto loop_image = dosrecomp::loader::binary_loader::load_bytes(loop_program);
+    if (!loop_image) { std::cerr << "failed to load do-while program\n"; return EXIT_FAILURE; }
+    const auto loop_elf = dosrecomp::compiler::branching_compiler::compile(*loop_image);
+    if (!loop_elf) { std::cerr << "failed to compile do-while program: " << loop_elf.error().message << "\n"; return EXIT_FAILURE; }
+    const auto lp_path = std::filesystem::temp_directory_path() / ("dosrecomp-lp-" + std::to_string(getpid()));
+    { std::ofstream output(lp_path, std::ios::binary); output.write(reinterpret_cast<const char*>(loop_elf->data()), static_cast<std::streamsize>(loop_elf->size())); }
+    std::filesystem::permissions(lp_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    const auto lp_pid = fork();
+    if (lp_pid == 0) { execl(lp_path.string().c_str(), lp_path.string().c_str(), static_cast<char*>(nullptr)); _exit(127); }
+    int lp_status = 0; waitpid(lp_pid, &lp_status, 0);
+    std::filesystem::remove(lp_path);
+    if (!WIFEXITED(lp_status) || WEXITSTATUS(lp_status) != 0) {
+        std::cerr << "do-while loop program did not exit 0\n";
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }
