@@ -131,3 +131,10 @@ Constant propagation consumes immutable SSA values and computes facts without
 rewriting them. Direct constant definitions are preserved and phi values fold
 only when every incoming value is the same known 16-bit constant; malformed or
 forward SSA references are rejected.
+
+## Plugins
+
+The plugin registry defines typed extension points for instruction decoders,
+optimizers, DOS API mappings, loaders, and output generators. It manages
+validated in-process metadata today; dynamic loading can be layered onto this
+stable contract without coupling compiler modules to a loader mechanism.
