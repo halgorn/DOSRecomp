@@ -351,5 +351,28 @@ int main() {
         std::cerr << "alloc program did not exit 0\n";
         return EXIT_FAILURE;
     }
+    const auto int10_program = std::vector<std::byte>{
+        b(0xb0), b('X'),
+        b(0xb3), b(0x07),
+        b(0xb9), b(0x02), b(0x00),
+        b(0xb4), b(0x09),
+        b(0xcd), b(0x10),
+        b(0xb8), b(0x00), b(0x4c),
+        b(0xcd), b(0x21),
+    };
+    const auto int10_image = dosrecomp::loader::binary_loader::load_bytes(int10_program);
+    if (!int10_image) { std::cerr << "failed to load INT 10h program\n"; return EXIT_FAILURE; }
+    const auto int10_elf = dosrecomp::compiler::branching_compiler::compile(*int10_image);
+    if (!int10_elf) { std::cerr << "failed to compile INT 10h program: " << int10_elf.error().message << "\n"; return EXIT_FAILURE; }
+    const auto i10_path = std::filesystem::temp_directory_path() / ("dosrecomp-i10-" + std::to_string(getpid()));
+    { std::ofstream output(i10_path, std::ios::binary); output.write(reinterpret_cast<const char*>(int10_elf->data()), static_cast<std::streamsize>(int10_elf->size())); }
+    std::filesystem::permissions(i10_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    {
+        const auto pid = fork();
+        if (pid == 0) { execl(i10_path.string().c_str(), i10_path.string().c_str(), static_cast<char*>(nullptr)); _exit(127); }
+        int st = 0; waitpid(pid, &st, 0);
+        if (!WIFEXITED(st) || WEXITSTATUS(st) != 0) { std::cerr << "INT 10h program did not exit 0\n"; std::filesystem::remove(i10_path); return EXIT_FAILURE; }
+    }
+    std::filesystem::remove(i10_path);
     return EXIT_SUCCESS;
 }

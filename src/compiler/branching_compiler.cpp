@@ -135,9 +135,14 @@ void emit_int21_runtime(std::ostream& out) {
 }
 
 void emit_int10_runtime(std::ostream& out) {
-    out << "  { const uint8_t ah = static_cast<uint8_t>(regs[0] >> 8);\n";
+    out << "  { const uint8_t ah = static_cast<uint8_t>(regs[0] >> 8), al = static_cast<uint8_t>(regs[0]);\n";
+    out << "    uint16_t cx_count = regs[1]; (void)cx_count;\n";
     out << "    switch (ah) {\n";
-    out << "    case 0x0e: { uint8_t ch = static_cast<uint8_t>(regs[0]); syscall(SYS_write, 1, &ch, 1); break; }\n";
+    out << "    case 0x0e: { uint8_t ch = al; syscall(SYS_write, 1, &ch, 1); break; }\n";
+    out << "    case 0x09: { uint8_t ch = al, attr = static_cast<uint8_t>(regs[3]);\n";
+    out << "      for (uint16_t k = 0; k < cx_count; ++k) { syscall(SYS_write, 1, &ch, 1); (void)attr; } break; }\n";
+    out << "    case 0x0a: { uint8_t ch = al;\n";
+    out << "      for (uint16_t k = 0; k < cx_count; ++k) syscall(SYS_write, 1, &ch, 1); break; }\n";
     out << "    case 0x02: break;\n";
     out << "    default: syscall(SYS_exit, 1); return;\n    }\n  }\n";
 }
@@ -204,11 +209,9 @@ void emit_move(std::ostream& out, const decoder::instruction& decoded) {
         const auto addr = emit_mem_addr(src);
         if (is_byte) out << "  " << byte_reg_store(dst.reg, "mem[" + addr + "]") << ";\n";
         else { std::ostringstream v; v << "(static_cast<uint16_t>(mem[" << addr << "]) | (static_cast<uint16_t>(mem[" << addr << " + 1]) << 8))";
-               out << "  regs[" << word_reg_index(dst.reg) << "] = " << v.str() << ";\n"; }
-        return;
+               out << "  regs[" << word_reg_index(dst.reg) << "] = " << v.str() << ";\n"; } return;
     }
     if (is_byte) out << "  " << byte_reg_store(dst.reg, byte_reg_access(src.reg)) << ";\n";
-
     else out << "  regs[" << word_reg_index(dst.reg) << "] = regs[" << word_reg_index(src.reg) << "];\n";
 }
 
@@ -354,7 +357,7 @@ emit_block_body(std::ostream& out, const loader::program_image& image, std::size
             position = next;
             break;
         }
-position = next;
+        position = next;
     }
     return {};
 }
@@ -397,8 +400,7 @@ collect_block_starts(const loader::program_image& image) {
         }
     }
     for (std::size_t pos = 0; pos < image.bytes.size() && starts.size() < 256; ) {
-        const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, pos);
-        if (!decoded) break;
+        const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, pos); if (!decoded) break;
         starts.insert(pos);
         pos += decoded->size;
         if (decoded->kind == decoder::instruction_kind::interrupt) break;
@@ -448,8 +450,7 @@ emit_c_runtime(const loader::program_image& image) {
     std::ostringstream out;
     emit_runtime_header(out);
     for (const auto start : *starts) out << "static inline __attribute__((always_inline)) void " << block_label(start) << "();\n";
-    for (const auto start : *starts) {
-        const auto result = emit_block_at(out, image, start, *starts);
+    for (const auto start : *starts) { const auto result = emit_block_at(out, image, start, *starts);
         if (!result) return std::unexpected(result.error());
     }
     const auto dispatch_result = emit_dispatch(out, *starts);
@@ -458,7 +459,6 @@ emit_c_runtime(const loader::program_image& image) {
     if (!main_result) return std::unexpected(main_result.error());
     return out.str();
 }
-
 } // namespace
 
 std::expected<std::uint8_t, branching_compile_error>
