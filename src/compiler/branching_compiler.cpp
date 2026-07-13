@@ -187,6 +187,21 @@ void emit_int10_runtime(std::ostream& out) {
     out << "  }\n";
 }
 
+void emit_int16_runtime(std::ostream& out) {
+    out << "  {\n";
+    out << "    const uint8_t ah = static_cast<uint8_t>(regs[0] >> 8);\n";
+    out << "    if (ah == 0x00 || ah == 0x10) {\n";
+    out << "      char ch = 0; long r;\n";
+    out << "      do { r = syscall(SYS_read, 0, &ch, 1); } while (r == -1);\n";
+    out << "      if (r < 0) { syscall(SYS_exit, 1); return; }\n";
+    out << "      regs[0] = static_cast<uint16_t>(static_cast<uint8_t>(ch));\n";
+    out << "      regs[2] = static_cast<uint16_t>(static_cast<uint8_t>(ch));\n";
+    out << "    } else {\n";
+    out << "      syscall(SYS_exit, 1); return;\n";
+    out << "    }\n";
+    out << "  }\n";
+}
+
 void emit_move_immediate(std::ostream& out, const decoder::instruction& decoded) {
     const auto& dst = decoded.operands[0];
     const auto width = dst.width;
@@ -262,6 +277,7 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
         if (decoded->kind == decoder::instruction_kind::interrupt) {
             if (decoded->interrupt_number == 0x21) emit_int21_runtime(out);
             else if (decoded->interrupt_number == 0x10) emit_int10_runtime(out);
+            else if (decoded->interrupt_number == 0x16) emit_int16_runtime(out);
             else { out << "  syscall(SYS_exit, 1); return;\n"; }
             position = next;
             continue;
@@ -353,7 +369,8 @@ collect_block_starts(const loader::program_image& image) {
                 }
                 if (decoded->kind == decoder::instruction_kind::conditional_jump ||
                     decoded->kind == decoder::instruction_kind::call ||
-                    decoded->kind == decoder::instruction_kind::interrupt) {
+                    (decoded->kind == decoder::instruction_kind::interrupt &&
+                     (decoded->interrupt_number == 0x21 || decoded->interrupt_number == 0x10 || decoded->interrupt_number == 0x16))) {
                     if (next < image.bytes.size()) {
                         if (starts.insert(next).second) changed = true;
                     }
