@@ -54,10 +54,18 @@ The objective is software preservation, reverse engineering, performance, and lo
 
 ## Current status
 
-The project now has a C++23 build, a validated COM/MZ loader, a small inspection
-CLI, and automated loader regression tests. Decoding, analysis, DOS API
-translation, and native code generation are planned next; the current CLI does
-not yet emit an executable.
+The project has a C++23 build, validated COM/MZ loading with MZ relocation
+application, an expanding 8086 decoder, CFG/function/loop analysis, control
+flow IR, register SSA, constant propagation, DOS runtime services, and native
+ELF emission. The CLI produces executable ELF output for a deliberately small,
+verified DOS exit subset; it rejects other programs with context rather than
+changing their behavior.
+
+Implemented runtime foundations include text video (`INT 10h`), virtual disk
+reads (`INT 13h`), keyboard queues (`INT 16h`), selected console/memory/clock
+services (`INT 21h`), conventional memory, a sandboxed DOS drive, and
+read-only DOS file handles. The supported instruction semantics and backend
+lowering remain incomplete; full 8086 program recompilation is active work.
 
 ### Build and test
 
@@ -73,8 +81,9 @@ Compile a supported DOS binary to a native executable:
 ./build/dosrecomp program.com -o program_linux
 ```
 
-The currently executable end-to-end subset is `MOV AX, 4Cxxh; INT 21h`; other
-program shapes are rejected with context while translation coverage expands.
+The currently executable end-to-end subset is either `MOV AX, 4Cxxh; INT 21h`
+or `MOV AH, 4Ch; MOV AL, xx; INT 21h`; other program shapes are rejected with
+context while translation coverage expands.
 
 Emit readable C++ for that same verified subset:
 
