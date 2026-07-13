@@ -20,8 +20,13 @@ int main() {
     const auto add_decoded = dosrecomp::decoder::instruction_decoder::decode_at(add_code, 0);
     const auto add_effect = add_decoded ? dosrecomp::semantics::instruction_translator::translate(add_code, *add_decoded, builder, state)
                                         : std::expected<dosrecomp::semantics::semantic_effect, dosrecomp::semantics::translation_error>{std::unexpected(dosrecomp::semantics::translation_error{"decode failed"})};
-    if (!effect || effect->destination != dosrecomp::ir::register_id::ax || effect->immediate != 0x1234 || !register_effect || register_effect->immediate || !add_effect ||
-        builder.values()[add_effect->ssa_value].operation != dosrecomp::ir::operation_kind::add || builder.values().size() != 13) {
+    const std::vector<std::byte> compare_code{b(0x3d), b(0), b(0)};
+    const auto compare_decoded = dosrecomp::decoder::instruction_decoder::decode_at(compare_code, 0);
+    const auto compare_effect = compare_decoded ? dosrecomp::semantics::instruction_translator::translate(compare_code, *compare_decoded, builder, state)
+                                                : std::expected<dosrecomp::semantics::semantic_effect, dosrecomp::semantics::translation_error>{std::unexpected(dosrecomp::semantics::translation_error{"decode failed"})};
+    if (!effect || effect->destination != dosrecomp::ir::register_id::ax || effect->immediate != 0x1234 || !register_effect || register_effect->immediate || !add_effect || !compare_effect ||
+        compare_effect->destination != dosrecomp::ir::register_id::flags || builder.values()[add_effect->ssa_value].operation != dosrecomp::ir::operation_kind::add ||
+        builder.values()[compare_effect->ssa_value].operation != dosrecomp::ir::operation_kind::compare || builder.values().size() != 15) {
         std::cerr << "failed to translate MOV AX, imm16\n";
         return EXIT_FAILURE;
     }

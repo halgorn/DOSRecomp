@@ -11,6 +11,7 @@ namespace {
     case decoder::alu_operation::bit_and: return ir::operation_kind::bit_and;
     case decoder::alu_operation::bit_or: return ir::operation_kind::bit_or;
     case decoder::alu_operation::bit_xor: return ir::operation_kind::bit_xor;
+    case decoder::alu_operation::compare: return ir::operation_kind::compare;
     default: return std::nullopt;
     }
 }
@@ -35,7 +36,7 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
     if (instruction.offset > code.size() || code.size() - instruction.offset < instruction.size) {
         return std::unexpected(translation_error{"decoded instruction exceeds source bytes"});
     }
-    if (instruction.kind == decoder::instruction_kind::arithmetic && instruction.operand_count == 2 &&
+    if ((instruction.kind == decoder::instruction_kind::arithmetic || instruction.kind == decoder::instruction_kind::compare) && instruction.operand_count == 2 &&
         instruction.operands[0].kind == decoder::operand_kind::reg && instruction.operands[0].width == decoder::operand_width::word &&
         instruction.operands[1].kind == decoder::operand_kind::immediate && instruction.operands[1].width == decoder::operand_width::word) {
         const auto destination = register_for(instruction.operands[0].reg);
@@ -43,7 +44,8 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
         if (!destination || !operation) return std::unexpected(translation_error{"arithmetic instruction semantics are not implemented"});
         const auto input = state.values[static_cast<std::size_t>(*destination)];
         const auto immediate = ssa.constant(*destination, instruction.operands[1].immediate);
-        return semantic_effect{*destination, ssa.define_operation(state, *destination, *operation, {input, immediate}), std::nullopt};
+        const auto result_register = *operation == ir::operation_kind::compare ? ir::register_id::flags : *destination;
+        return semantic_effect{result_register, ssa.define_operation(state, result_register, *operation, {input, immediate}), std::nullopt};
     }
     if ((instruction.kind != decoder::instruction_kind::move_immediate && instruction.kind != decoder::instruction_kind::move) || instruction.operand_count != 2 ||
         instruction.operands[0].kind != decoder::operand_kind::reg ||
