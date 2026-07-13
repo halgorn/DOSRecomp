@@ -35,6 +35,9 @@ additionally emits typed operands; the semantics layer consumes those decoded
 fields rather than re-reading instruction bytes. Memory forms retain their
 validated ModR/M encoding plus decoded 8086 base/index registers and signed
 displacement for later effective-address lowering.
+`effective_address_resolver` consumes these operands and calculates only the
+wrapping 16-bit offset; segment selection and memory access remain separate
+layers.
 Accumulator-immediate arithmetic and comparison forms also expose their
 accumulator and immediate operands, providing the verified input for flag and
 branch semantics.
