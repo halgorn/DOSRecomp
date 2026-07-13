@@ -87,6 +87,7 @@ void emit_runtime_header(std::ostream& out) {
     out << "#include <cstdint>\n";
     out << "#include <cstdio>\n";
     out << "#include <cstdlib>\n";
+    out << "#include <ctime>\n";
     out << "#include <fcntl.h>\n";
     out << "#include <sys/syscall.h>\n";
     out << "#include <unistd.h>\n";
@@ -167,6 +168,11 @@ void emit_int21_runtime(std::ostream& out) {
     out << "      uint32_t base = (static_cast<uint32_t>(regs[11]) << 4) + regs[2];\n";
     out << "      int dst = (h == 1) ? 1 : (h == 2) ? 2 : (h >= 3 && h < 16) ? handle_to_fd[h] : 1;\n";
     out << "      if (cnt > 0) syscall(SYS_write, dst, &mem[base], cnt); break; }\n";
+    out << "    case 0x2a: case 0x2c: { struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);\n";
+    out << "      struct tm tm; gmtime_r(&ts.tv_sec, &tm);\n";
+    out << "      if (ah == 0x2a) regs[0] = static_cast<uint16_t>(((tm.tm_year + 1900 - 1980) << 9) | (tm.tm_mon << 5) | tm.tm_mday), regs[2] = 0;\n";
+    out << "      else regs[0] = static_cast<uint16_t>((tm.tm_hour << 8) | tm.tm_min), regs[2] = tm.tm_sec;\n";
+    out << "      break; }\n";
     out << "    default: syscall(SYS_exit, 1); return;\n";
     out << "    }\n";
     out << "  }\n";
