@@ -1,5 +1,7 @@
 # TODO
 
+Status: tracked against updated PRD (C++ backend primary; LLVM/SSA future).
+
 Legend: [x] done, [~] partial, [ ] todo, [b] blocked
 
 ## INT 21h (DOS API)
@@ -19,11 +21,12 @@ Legend: [x] done, [~] partial, [ ] todo, [b] blocked
 - [x] AH=49h free memory
 - [x] AH=4Ah resize memory
 - [x] AH=4Ch exit
-- [ ] AH=19h get current drive
 - [ ] AH=0Eh select default drive
-- [ ] AH=25h/35h set/get interrupt vector
+- [ ] AH=19h get current drive
+- [ ] AH=25h set interrupt vector
 - [ ] AH=30h get DOS version
 - [ ] AH=33h get/set Ctrl-C flag
+- [ ] AH=35h get interrupt vector
 - [ ] AH=38h country info
 - [ ] AH=4Bh exec program
 - [ ] AH=4Dh get return code
@@ -73,54 +76,64 @@ Legend: [x] done, [~] partial, [ ] todo, [b] blocked
 - [x] 0xE0-0xEF LOOP, JMP, IN, OUT
 - [x] 0xF0-0xFF LOCK, REPNE, REP, HLT, CMC, grp2/3/4/5
 - [b] 0x0F two-byte opcodes (POP CS, MOV TR, etc.)
+- [ ] 0x66 operand size prefix (32-bit)
+- [ ] 0x67 address size prefix
 - [ ] LEA/LES/LDS/BOUND
-- [ ] XLAT, XCHG mem,atomic XADD
+- [ ] XLAT, XCHG mem, atomic XADD
+- [ ] BCD adjust: AAM, AAD, DAA, DAS, AAS
 
-## Compiler
+## Compiler (C++ backend)
 - [x] Straight-line C++ emitter
 - [x] Branching C++ emitter (block fusion)
-- [x] Runtime CALL/RET
+- [x] Runtime CALL/RET (256-deep stack)
 - [x] Runtime segment dispatch
 - [x] Inline block functions
 - [x] High-level if/else from Jcc
 - [x] High-level do/while from backward Jcc
-- [~] High-level while/for (not yet)
 - [x] Direct memory access (no MMU)
 - [x] Byte/word register coherence
 - [x] INT 0x21 as block terminator
 - [x] INT 0x21 last-in-program skip
-- [ ] MZ EXE support (loader reads entry CS:IP)
-- [ ] Segment register tracking
-- [ ] Function recovery (PR §5)
+- [~] MZ EXE support — loader reads entry, relocations not applied
+- [ ] Segment register tracking (DS:SI, ES:DI as 16:16)
+- [ ] Function recovery (prologue detection)
 - [ ] Data section recovery
-- [ ] String op support (MOVS, STOS, LODS, CMPS, SCAS)
-- [ ] Custom segment:offset (DS:SI, ES:DI)
-- [ ] I/O port (IN/OUT) — silently dropped
+- [ ] String ops (MOVS, STOS, LODS, CMPS, SCAS)
+- [ ] I/O port (IN/OUT) — silently dropped today
 - [ ] PUSHA/POPA, ENTER, LEAVE
-- [ ] 32-bit operand size prefix (0x66)
-- [ ] AAD, AAM, AAS, DAA, DAS (BCD adjust)
+- [ ] High-level while/for/switch
+- [ ] REP/REPNE prefix
+- [ ] CLI flag: --keep-cpp (write generated C++ to disk)
 
 ## Tooling
 - [x] dosrecomp CLI (compile .com → elf)
-- [ ] dosrecomp CLI for .exe (MZ)
 - [x] CTest (33/33 passing)
-- [ ] Real DOS utility tests (examples/)
+- [x] Build under 2 seconds
 - [ ] CI (GitHub Actions)
-- [ ] clang-tidy
 - [ ] AddressSanitizer run
+- [ ] clang-tidy
 - [ ] Fuzzing harness (decoder)
 - [ ] benchmark.json (compile + run time)
+- [ ] example run script (real .com → recompile → run)
 
 ## Docs
-- [x] PRD.md
+- [x] PRD.md (updated 2026-07-13: C++ backend primary)
 - [x] docs/architecture.md
 - [x] README.md
+- [x] TODO.md (this file)
 - [ ] examples/ (real DOS .com recompiled)
 - [ ] CONTRIBUTING.md
 - [ ] CHANGELOG.md
-- [ ] API mapping table (PRD §11)
+- [ ] API mapping table (INT 21h/10h/16h/13h → runtime helper)
+
+## Future (Multi-arch, requires LLVM backend — §8)
+- [ ] SSA construction
+- [ ] IR + LLVM IR generator
+- [ ] ARM64 backend
+- [ ] RISC-V backend
+- [ ] WebAssembly backend
 
 ## Non-Goals (PRD)
-- [ ] Don't emulate CPU ✅
-- [ ] No DOS runtime needed at runtime ✅
-- [ ] No VM ✅
+- [ ] Don't emulate CPU — OK
+- [ ] No DOS runtime at runtime — OK
+- [ ] No VM — OK

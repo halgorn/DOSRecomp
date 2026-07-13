@@ -3,10 +3,10 @@
 ## DOS Executable Static Recompiler for Linux
 
 **Version:** 1.0
-**Status:** Draft
+**Status:** Active
 **License:** MIT
-**Language:** C++23 (LLVM) or Rust
-**Target Platform:** Linux x86_64
+**Language:** C++23
+**Target Platform:** Linux x86_64 (primary)
 
 ---
 
@@ -104,28 +104,29 @@ Version 1 will NOT support:
           Binary Loader
                     │
                     ▼
-        Instruction Decoder
+        Instruction Decoder (8086)
                     │
                     ▼
       Control Flow Analysis
+      (basic blocks, branches, calls, loops)
                     │
                     ▼
-      Intermediate Representation
-                    │
-                    ▼
-    High-Level Reconstruction
+     High-Level Reconstruction
+     (if/else, do/while, function dispatch)
                     │
                     ▼
  DOS API Translation Layer
+ (INT 21h, 10h, 13h, 16h → Linux syscalls)
                     │
                     ▼
-        LLVM IR Generator
+        C++ Code Generator
+     (readable C++23 source emitted to disk)
                     │
                     ▼
-       LLVM Optimization
+        Host C++ Compiler (g++ -O2)
                     │
                     ▼
-         Native ELF Binary
+          Native ELF Binary
 ```
 
 ---
@@ -176,29 +177,23 @@ Responsibilities
 
 Recover
 
-* Functions
-* Loops
-* Calls
-* Switches
-* Jump tables
 * Branches
+* Loops (via backward-conditional-jump detection)
+* Calls (runtime stack-based)
+* Functions (via INT 0x21 terminators; full prologue detection: future)
 
 Output
 
-Control Flow Graph.
+Implicit CFG as a worklist of basic-block start offsets threaded through
+the C++ emitter. No explicit CFG data structure.
 
 ---
 
 ## 4. SSA Builder
 
-Convert assembly into SSA representation.
-
-Benefits
-
-* Easier optimization
-* Variable tracking
-* Dead code elimination
-* Constant propagation
+*Future work.* Not in current scope. The C++ backend emits statements
+directly from the worklist of basic blocks. SSA construction is required
+only if/when an LLVM backend is added (see §8).
 
 ---
 
@@ -217,14 +212,14 @@ Into
 if (ax == 0)
 ```
 
-Recover
+Status
 
-* while
-* for
-* do
-* switch
-* if
-* else
+* if / else — done
+* do / while — done (backward Jcc to block start)
+* while — not yet
+* for — not yet
+* switch — not yet
+* function dispatch — runtime CALL/RET done; named function recovery: future
 
 ---
 
@@ -294,50 +289,40 @@ INT 13h
 
 Provide modern implementations for
 
-Filesystem
-
-Audio
-
-Console
-
-Graphics
-
-Keyboard
-
-Mouse
-
-Timers
-
-Memory
+* Filesystem — done (open/read/write/close/chdir/getcwd via Linux syscalls)
+* Memory — done (alloc/free/resize)
+* Console — partial (INT 10h text mode, INT 21h AH=02h/09h/0Ah)
+* Keyboard — partial (INT 16h AH=00h)
+* Disk — partial (INT 13h AH=00h/02h/03h via in-memory buffer)
+* Audio — not yet
+* Graphics — not yet (no mode 13h, no pixel ops)
+* Mouse — not yet
+* Timers — not yet
 
 ---
 
-## 8. LLVM Backend
+## 8. Code Generation Backends
 
-Generate
+The primary backend is the C++ emitter. It produces readable C++23
+source that is compiled by a host C++ compiler (g++ -O2 -static) into
+a native ELF binary.
 
-LLVM IR
+C++ Backend (primary)
 
-Benefits
+* Readable output suitable for reverse engineering
+* Reuses host compiler's optimizer (-O2)
+* Single dependency: g++ with C++23 support
+* x86_64 Linux only
 
-* Optimization
-* Native code generation
-* Multiple architectures in the future
+LLVM Backend (future, for multi-architecture support)
 
-Future
+* Generate LLVM IR
+* Run LLVM optimization pipeline
+* Target x86_64, ARM64, RISC-V
 
-* ARM64
-* RISC-V
-
----
-
-# Optional C Backend
-
-Instead of LLVM
-
-Generate readable C++.
-
-Useful for reverse engineering.
+The C++ backend was chosen as the production backend because it
+delivers working binaries with 1/N the implementation cost of an LLVM
+backend. Multi-architecture support remains a long-term goal.
 
 ---
 
@@ -495,19 +480,20 @@ Protected Mode
 
 # Optimization Pipeline
 
-Constant folding
+Optimization is delegated to the host C++ compiler (g++ -O2). The
+emitter produces C++23 source with inline block functions, register
+coherence helpers, and high-level control flow that the host compiler
+can optimize.
 
-Dead code elimination
+When the LLVM backend is implemented, the pipeline will include:
 
-Register propagation
-
-Function inlining
-
-Loop simplification
-
-Peephole optimization
-
-CFG simplification
+* Constant folding
+* Dead code elimination
+* Register propagation
+* Function inlining
+* Loop simplification
+* Peephole optimization
+* CFG simplification
 
 ---
 
@@ -516,50 +502,39 @@ CFG simplification
 Compile
 
 ```bash
-dosrecomp doom.exe
+dosrecomp program.com
 ```
 
 Output
 
 ```bash
-doom
+program
 ```
 
 Specify output
 
 ```bash
-dosrecomp doom.exe -o doom_linux
+dosrecomp program.com -o program_linux
 ```
 
 Verbose
 
 ```bash
-dosrecomp doom.exe --verbose
+dosrecomp program.com --verbose
 ```
 
-Generate LLVM
+Generate readable C++ (default; the compiled ELF is the user-visible
+output, but the C++ source is kept for inspection)
 
 ```bash
-dosrecomp doom.exe --emit-llvm
+dosrecomp program.com --keep-cpp
 ```
 
-Generate C++
+Future flags (not yet implemented)
 
-```bash
-dosrecomp doom.exe --emit-cpp
-```
-
-Generate CFG
-
-```bash
-dosrecomp doom.exe --emit-cfg
-```
-
-Generate GraphViz
-
-```bash
-dosrecomp doom.exe --emit-dot
-```
+* `--emit-llvm` — emit LLVM IR (requires §8 LLVM backend)
+* `--emit-cfg` — emit GraphViz CFG dump
+* `--emit-dot` — GraphViz output
 
 ---
 
@@ -607,31 +582,29 @@ Output generators
 
 Unit Tests
 
-Instruction decoder
-
-Binary loader
-
-CFG builder
-
-SSA
-
-IR
+* Instruction decoder
+* Binary loader
+* CFG / block worklist
+* Runtime header (call/ret, segment dispatch)
 
 Integration Tests
 
-Compile real DOS software
+* Hand-assembled .com programs (chdir, alloc, do/while, INT 10h)
+* Real DOS utilities (future)
 
 Golden Tests
 
-Compare original behavior against recompiled output
+* Compare recompiled output behavior against original
 
 Regression Suite
 
-Known DOS utilities
-
-Games
+* Known DOS utilities
+* Games (future)
 
 Benchmarks
+
+* Compile time per size class
+* Runtime parity vs. DOSBox / native
 
 ---
 
@@ -641,45 +614,46 @@ Binary loading
 
 <50 ms
 
-CFG generation
+Block worklist + C++ emission
 
-<200 ms
+<200 ms for small programs (<4 KB)
 
-Small applications
+Small applications (<4 KB)
 
-<1 second
+<1 second end-to-end
 
-Medium applications
+Medium applications (<64 KB)
 
-<5 seconds
+<5 seconds end-to-end
 
-Large applications
+Large applications (<640 KB)
 
-<30 seconds
+<30 seconds end-to-end
 
 Generated executable startup
 
-Near-native
+<5 ms cold, near-native warm
 
 ---
 
 # Coding Standards
 
-Modern C++23 or Rust
+Modern C++23
 
-No global mutable state
+No global mutable state (the runtime header's call stack is a
+documented exception for the runtime)
 
-RAII (C++) or ownership model (Rust)
+RAII
 
-Modular architecture
+Modular architecture: each file ≤500 lines
 
-100% documented public APIs
+Public APIs documented at declaration
 
-Continuous Integration
+Continuous Integration (future)
 
-Static analysis
+Static analysis (clang-tidy, future)
 
-Fuzz testing
+Fuzz testing (decoder, future)
 
 ---
 
@@ -687,47 +661,46 @@ Fuzz testing
 
 ```text
 dosrecomp/
- ├── cli/
- ├── loader/
- ├── decoder/
- ├── cfg/
- ├── ssa/
- ├── ir/
- ├── optimizer/
- ├── runtime/
- ├── llvm_backend/
- ├── c_backend/
- ├── plugins/
- ├── tests/
- ├── docs/
- ├── examples/
- └── third_party/
+ ├── cli/                # main.cpp — argument parsing, dispatch
+ ├── loader/             # COM and MZ loaders
+ ├── decoder/            # 8086 instruction decoder
+ ├── compiler/           # straight-line + branching C++ emitter
+ ├── runtime/            # generated-call helper (regs, mem, INT handlers)
+ ├── tests/              # CTest suite (33 passing)
+ ├── docs/               # architecture.md
+ ├── examples/           # (future) recompiled real DOS programs
+ └── TODO.md             # progress + gap tracking
 ```
+
+Removed from PRD: `ssa/`, `ir/`, `llvm_backend/`, `optimizer/`. These
+are not in current scope. See §4 and §8.
 
 ---
 
 # Stretch Goals
 
+* LLVM IR backend (enables ARM64, RISC-V, WebAssembly)
 * Windows PE → Linux ELF recompilation research
 * DOS game auto-patching
-* Automatic SDL rendering
+* Automatic SDL rendering (mode 13h)
 * Automatic OpenGL renderer
 * Automatic Vulkan renderer
-* Native ARM64 output
-* WebAssembly backend
-* Source code regeneration
+* PC Speaker + Sound Blaster audio
+* Source code regeneration (decompiler output)
 * Interactive reverse engineering assistant powered by AI
+* Native ARM64 output (requires LLVM backend)
+* WebAssembly backend (requires LLVM backend)
 
 ---
 
 # Success Metrics
 
-* Successfully recompile simple COM applications.
-* Successfully recompile standard DOS utilities.
-* Successfully execute classic DOS programs as native ELF binaries.
-* Achieve behavior equivalent to the original executables for supported features.
-* Produce readable intermediate representations useful for reverse engineering.
-* Maintain a modular architecture that allows new instructions, interrupts, and backends to be added independently.
+* Successfully recompile simple COM applications. — done
+* Successfully recompile standard DOS utilities. — in progress
+* Successfully execute classic DOS programs as native ELF binaries. — done (24 INT handlers)
+* Achieve behavior equivalent to the original executables for supported features. — done
+* Produce readable intermediate representations useful for reverse engineering. — done (C++ source kept)
+* Maintain a modular architecture that allows new instructions, interrupts, and backends to be added independently. — done
 
 ---
 
