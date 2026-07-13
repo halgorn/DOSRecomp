@@ -13,7 +13,14 @@ int main() {
     const auto unsupported = dosrecomp::compiler::exit_program_compiler::compile({
         .format = dosrecomp::loader::executable_format::com, .bytes = {b(0x90)},
         .entry_point = {0, 0x100}, .initial_stack = {}, .relocations = {}});
-    if (!elf || !exit_code || *exit_code != 7 || elf->size() != 132 || std::to_integer<unsigned char>((*elf)[126]) != 7 || unsupported) {
+    std::vector<std::byte> mz(37, b(0));
+    mz[0] = b('M'); mz[1] = b('Z'); mz[2] = b(37); mz[4] = b(1); mz[8] = b(2);
+    mz[32] = b(0xb8); mz[33] = b(9); mz[34] = b(0x4c); mz[35] = b(0xcd); mz[36] = b(0x21);
+    const auto loaded_mz = dosrecomp::loader::binary_loader::load_bytes(mz);
+    const auto mz_elf = loaded_mz ? dosrecomp::compiler::exit_program_compiler::compile(*loaded_mz)
+                                  : std::expected<std::vector<std::byte>, dosrecomp::compiler::compile_error>{std::unexpected(dosrecomp::compiler::compile_error{"MZ load failed"})};
+    if (!elf || !exit_code || *exit_code != 7 || elf->size() != 132 || std::to_integer<unsigned char>((*elf)[126]) != 7 ||
+        !mz_elf || std::to_integer<unsigned char>((*mz_elf)[126]) != 9 || unsupported) {
         std::cerr << "failed end-to-end exit recompilation\n";
         return EXIT_FAILURE;
     }
