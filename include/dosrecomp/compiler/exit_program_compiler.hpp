@@ -13,7 +13,8 @@ namespace dosrecomp::compiler {
 struct compile_error { std::string message; };
 
 /**
- * Compiles `MOV AX, 4Cxxh; INT 21h` at an image entry point into native ELF.
+ * Compiles a verified DOS exit sequence, plus the COM `INT 21h/AH=09h` console
+ * output sequence followed by an exit, into a native ELF executable.
  *
  * This deliberately narrow vertical slice proves loader → decoder → semantics
  * → backend composition. Other program shapes are rejected until translated.

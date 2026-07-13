@@ -22,6 +22,58 @@ skip_nops(const std::vector<std::byte>& code, std::size_t offset) {
     const auto interrupt = decoder::instruction_decoder::decode_at(code, offset);
     return interrupt && interrupt->kind == decoder::instruction_kind::interrupt && interrupt->interrupt_number == 0x21;
 }
+
+[[nodiscard]] std::expected<std::uint8_t, compile_error>
+extract_exit_code_at(const loader::program_image& image, std::size_t offset) {
+    const auto move = decoder::instruction_decoder::decode_at(image.bytes, offset);
+    if (!move) return std::unexpected(compile_error{"cannot decode exit instruction: " + move.error().message});
+    if (move->kind == decoder::instruction_kind::move_immediate && move->size == 3 &&
+        std::to_integer<std::uint8_t>(image.bytes[offset]) == 0xb8 && offset + 3 <= image.bytes.size()) {
+        const auto immediate = static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(image.bytes[offset + 1])) |
+                               (static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(image.bytes[offset + 2])) << 8U);
+        const auto interrupt = skip_nops(image.bytes, offset + move->size);
+        if (interrupt && is_exit_interrupt(image.bytes, *interrupt) && (immediate >> 8U) == 0x4cU) {
+            return static_cast<std::uint8_t>(immediate);
+        }
+    }
+    return std::unexpected(compile_error{"console output must be followed by MOV AX, 4Cxxh; INT 21h"});
+}
+
+[[nodiscard]] std::expected<std::vector<std::byte>, compile_error>
+compile_console_program(const loader::program_image& image) {
+    if (image.format != loader::executable_format::com) {
+        return std::unexpected(compile_error{"INT 21h/AH=09h console compilation currently supports COM images only"});
+    }
+    const auto entry_result = skip_nops(image.bytes, image.entry_offset());
+    if (!entry_result) return std::unexpected(entry_result.error());
+    const auto entry = *entry_result;
+    if (image.bytes.size() - entry < 5 || std::to_integer<std::uint8_t>(image.bytes[entry]) != 0xba ||
+        std::to_integer<std::uint8_t>(image.bytes[entry + 3]) != 0xb4 ||
+        std::to_integer<std::uint8_t>(image.bytes[entry + 4]) != 0x09) {
+        return std::unexpected(compile_error{"entry is not MOV DX, offset; MOV AH, 09h"});
+    }
+    const auto dx = static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(image.bytes[entry + 1])) |
+                    (static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(image.bytes[entry + 2])) << 8U);
+    const auto dx_offset = static_cast<std::size_t>(dx);
+    if (dx_offset < 0x100U || dx_offset - 0x100U >= image.bytes.size()) {
+        return std::unexpected(compile_error{"INT 21h/AH=09h DX points outside the COM image"});
+    }
+    const auto interrupt_result = skip_nops(image.bytes, entry + 5);
+    if (!interrupt_result || !is_exit_interrupt(image.bytes, *interrupt_result)) {
+        return std::unexpected(compile_error{"MOV AH, 09h must be followed by INT 21h"});
+    }
+    const auto exit_offset = skip_nops(image.bytes, *interrupt_result + 2);
+    if (!exit_offset) return std::unexpected(exit_offset.error());
+    const auto exit_code = extract_exit_code_at(image, *exit_offset);
+    if (!exit_code) return std::unexpected(exit_code.error());
+    const auto string_begin = dx_offset - 0x100U;
+    std::vector<std::byte> message;
+    for (std::size_t cursor = string_begin; cursor < image.bytes.size(); ++cursor) {
+        if (image.bytes[cursor] == std::byte{'$'}) return backend::elf_writer::emit_write_exit_executable(message, *exit_code);
+        message.push_back(image.bytes[cursor]);
+    }
+    return std::unexpected(compile_error{"INT 21h/AH=09h string is missing its '$' terminator"});
+}
 }
 
 std::expected<std::uint8_t, compile_error>
@@ -66,6 +118,7 @@ exit_program_compiler::extract_exit_code(const loader::program_image& image) {
 
 std::expected<std::vector<std::byte>, compile_error>
 exit_program_compiler::compile(const loader::program_image& image) {
+    if (const auto console = compile_console_program(image); console) return *console;
     const auto exit_code = extract_exit_code(image);
     if (!exit_code) return std::unexpected(exit_code.error());
     return backend::elf_writer::emit_exit_executable(*exit_code);

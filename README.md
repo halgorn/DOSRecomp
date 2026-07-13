@@ -82,9 +82,11 @@ Compile a supported DOS binary to a native executable:
 ./build/dosrecomp program.com -o program_linux
 ```
 
-The currently executable end-to-end subset is either `MOV AX, 4Cxxh; INT 21h`
-or `MOV AH, 4Ch; MOV AL, xx; INT 21h`; other program shapes are rejected with
-context while translation coverage expands.
+The currently executable end-to-end subset is either `MOV AX, 4Cxxh; INT 21h`,
+`MOV AH, 4Ch; MOV AL, xx; INT 21h`, or a COM program whose entry performs
+`MOV DX, offset; MOV AH, 09h; INT 21h` followed by the first exit form. The
+last form emits the validated `$`-terminated string to stdout. Other program
+shapes are rejected with context while translation coverage expands.
 
 Emit readable C++ for that same verified subset:
 

@@ -58,18 +58,22 @@ facts rather than guessing whether a loop originated as `for`, `while`, or
 
 ## Backend
 
-The initial ELF backend emits a structurally valid ELF64/x86_64 image with one
-loadable executable segment and a Linux `exit` syscall stub. It establishes
-checked byte-order and segment-layout primitives; lowering recovered DOS
-semantics into this image remains the next backend stage.
+The ELF backend emits structurally valid ELF64/x86_64 images with one loadable
+executable segment. Its verified stubs support Linux `exit` and `write` then
+`exit`, with embedded payload bytes addressed through RIP-relative code. This
+is intentionally a small syscall boundary; general native lowering remains a
+later stage.
 
 ## Compiler pipeline
 
-The first vertical compiler slice accepts `MOV AX, 4Cxxh; INT 21h` or the
-equivalent explicit byte-register sequence using `MOV AH, 4Ch` and `MOV AL, xx`
-in either order. It accepts NOP padding around those instructions, emits a
-native ELF that exits with `xx`, and rejects every other program rather than
-changing semantics.
+The compiler accepts `MOV AX, 4Cxxh; INT 21h` or the equivalent explicit
+byte-register sequence using `MOV AH, 4Ch` and `MOV AL, xx` in either order.
+It also compiles a COM entry sequence `MOV DX, offset; MOV AH, 09h; INT 21h`
+when followed by the word-register exit form. The offset is required to remain
+inside the COM image and its string must have a `$` terminator; the generated
+ELF writes only the bytes before that terminator and exits with `xx`. NOP
+padding around exit instructions is accepted. Every other shape is rejected
+rather than changing semantics.
 
 ## IR
 

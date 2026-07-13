@@ -1,7 +1,11 @@
 #include "dosrecomp/compiler/exit_program_compiler.hpp"
 
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace { std::byte b(unsigned value) { return static_cast<std::byte>(value); } }
 
@@ -29,12 +33,33 @@ int main() {
     const auto padded = dosrecomp::loader::binary_loader::load_bytes({b(0x90), b(0xb8), b(5), b(0x4c), b(0x90), b(0xcd), b(0x21)});
     const auto padded_elf = padded ? dosrecomp::compiler::exit_program_compiler::compile(*padded)
                                    : std::expected<std::vector<std::byte>, dosrecomp::compiler::compile_error>{std::unexpected(dosrecomp::compiler::compile_error{"padded load failed"})};
+    const auto console = dosrecomp::loader::binary_loader::load_bytes({
+        b(0xba), b(12), b(1), b(0xb4), b(9), b(0xcd), b(0x21), b(0xb8), b(6), b(0x4c), b(0xcd), b(0x21),
+        b('o'), b('k'), b('\n'), b('$')});
+    const auto console_elf = console ? dosrecomp::compiler::exit_program_compiler::compile(*console)
+                                     : std::expected<std::vector<std::byte>, dosrecomp::compiler::compile_error>{std::unexpected(dosrecomp::compiler::compile_error{"console load failed"})};
     if (!elf || !exit_code || !llvm || llvm->find("ret i32 7") == std::string::npos || *exit_code != 7 || elf->size() != 132 || std::to_integer<unsigned char>((*elf)[126]) != 7 ||
         !byte_elf || std::to_integer<unsigned char>((*byte_elf)[126]) != 3 ||
         !reversed_byte_elf || std::to_integer<unsigned char>((*reversed_byte_elf)[126]) != 4 ||
         !padded_elf || std::to_integer<unsigned char>((*padded_elf)[126]) != 5 ||
-        !mz_elf || std::to_integer<unsigned char>((*mz_elf)[126]) != 9 || unsupported) {
+        !mz_elf || std::to_integer<unsigned char>((*mz_elf)[126]) != 9 || !console_elf || unsupported) {
         std::cerr << "failed end-to-end exit recompilation\n";
+        return EXIT_FAILURE;
+    }
+    const auto executable = std::filesystem::temp_directory_path() / ("dosrecomp-console-" + std::to_string(getpid()));
+    {
+        std::ofstream output(executable, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(console_elf->data()), static_cast<std::streamsize>(console_elf->size()));
+    }
+    std::filesystem::permissions(executable, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    const auto command = executable.string() + " > " + (executable.string() + ".out");
+    const auto status = std::system(command.c_str());
+    std::ifstream captured(executable.string() + ".out", std::ios::binary);
+    std::string text{std::istreambuf_iterator<char>{captured}, {}};
+    std::filesystem::remove(executable);
+    std::filesystem::remove(executable.string() + ".out");
+    if (status == -1 || !WIFEXITED(status) || WEXITSTATUS(status) != 6 || text != "ok\n") {
+        std::cerr << "failed native console recompilation\n";
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
