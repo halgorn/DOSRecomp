@@ -86,6 +86,19 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
     }
     return operand{operand_kind::memory, width, register_name::al, 0, modrm, addresses[rm], count, displacement};
 }
+[[nodiscard]] instruction accumulator_immediate(instruction_kind kind, const std::vector<std::byte>& code,
+                                                 std::size_t offset, std::uint8_t opcode) {
+    const auto width = (opcode & 1U) == 0 ? operand_width::byte : operand_width::word;
+    const auto size = static_cast<std::uint8_t>(width == operand_width::byte ? 2 : 3);
+    std::uint16_t immediate = static_cast<std::uint16_t>(byte_at(code, offset + 1));
+    if (width == operand_width::word) {
+        immediate = static_cast<std::uint16_t>(immediate | (static_cast<std::uint16_t>(byte_at(code, offset + 2)) << 8U));
+    }
+    const auto accumulator = width == operand_width::byte ? register_name::al : register_name::ax;
+    return instruction{kind, offset, size, 0, 0,
+        {operand{operand_kind::reg, width, accumulator, 0, 0},
+         operand{operand_kind::immediate, width, register_name::al, immediate, 0}}, 2};
+}
 } // namespace
 
 std::expected<instruction, decode_error>
@@ -164,7 +177,7 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         if (code.size() - offset < size) return truncated(offset);
         const auto kind = (opcode & 0xf8U) == 0x38U || opcode == 0xa8 || opcode == 0xa9
             ? instruction_kind::compare : instruction_kind::arithmetic;
-        return instruction{kind, offset, size, 0, 0};
+        return accumulator_immediate(kind, code, offset, opcode);
     }
     if ((opcode >= 0x50 && opcode <= 0x5f) || opcode == 0x06 || opcode == 0x07 || opcode == 0x0e || opcode == 0x16 || opcode == 0x17 || opcode == 0x1e || opcode == 0x1f) {
         return instruction{instruction_kind::stack, offset, 1, 0, 0};

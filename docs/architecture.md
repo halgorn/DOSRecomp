@@ -35,6 +35,9 @@ additionally emits typed operands; the semantics layer consumes those decoded
 fields rather than re-reading instruction bytes. Memory forms retain their
 validated ModR/M encoding plus decoded 8086 base/index registers and signed
 displacement for later effective-address lowering.
+Accumulator-immediate arithmetic and comparison forms also expose their
+accumulator and immediate operands, providing the verified input for flag and
+branch semantics.
 8086 segment, LOCK, and REP prefix combinations are included in instruction
 boundaries and are bounded to the architectural 15-byte instruction maximum.
 Far-pointer loads and 8087 escape encodings are also bounded and labeled, but
