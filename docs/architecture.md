@@ -45,6 +45,13 @@ It records proven call sites and deliberately never promotes a jump target to a
 function. Indirect calls and shared-tail recovery remain unsupported pending
 complete operand decoding.
 
+## Backend
+
+The initial ELF backend emits a structurally valid ELF64/x86_64 image with one
+loadable executable segment and a Linux `exit` syscall stub. It establishes
+checked byte-order and segment-layout primitives; lowering recovered DOS
+semantics into this image remains the next backend stage.
+
 ## IR
 
 The IR module lowers validated CFG block starts into stable numeric IDs and
