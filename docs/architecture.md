@@ -113,6 +113,10 @@ release ownership, and coalesces adjacent free blocks.
 `INT 21h` exposes that model through `AH=48h` allocation and `AH=49h` release,
 returning an allocated segment only after the request is validated.
 
+Date (`AH=2Ah`) and time (`AH=2Ch`) queries consume an injected `dos_clock`, so
+host policy supplies the current time while translated behavior remains
+deterministic and testable.
+
 `virtual_drive` maps one absolute DOS drive into an explicit host root. It is a
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
 rejected before a filesystem operation is attempted.

@@ -38,4 +38,10 @@ int21_memory_dispatcher::dispatch(const int21_request& request, conventional_mem
     return std::unexpected(dos_error{"unsupported INT 21h memory function"});
 }
 
+std::expected<int21_clock_result, dos_error>
+int21_clock_dispatcher::dispatch(const int21_request& request, const dos_clock& clock) {
+    if (request.ah == 0x2a || request.ah == 0x2c) return int21_clock_result{.value = clock};
+    return std::unexpected(dos_error{"unsupported INT 21h clock function"});
+}
+
 } // namespace dosrecomp::runtime

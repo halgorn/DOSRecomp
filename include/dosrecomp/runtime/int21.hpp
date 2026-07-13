@@ -48,4 +48,15 @@ public:
     dispatch(const int21_request& request, conventional_memory& memory);
 };
 
+/** DOS-compatible clock values supplied by the host integration layer. */
+struct dos_clock { std::uint16_t year{}; std::uint8_t month{}; std::uint8_t day{}; std::uint8_t weekday{}; std::uint8_t hour{}; std::uint8_t minute{}; std::uint8_t second{}; std::uint8_t hundredths{}; };
+struct int21_clock_result { std::optional<dos_clock> value; };
+
+/** Implements INT 21h date (`2Ah`) and time (`2Ch`) queries from an injected clock. */
+class int21_clock_dispatcher final {
+public:
+    [[nodiscard]] static std::expected<int21_clock_result, dos_error>
+    dispatch(const int21_request& request, const dos_clock& clock);
+};
+
 } // namespace dosrecomp::runtime

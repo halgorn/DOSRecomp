@@ -17,7 +17,11 @@ int main() {
     const auto released = allocated && allocated->allocated_segment
         ? dosrecomp::runtime::int21_memory_dispatcher::dispatch({.ah = 0x49, .es = *allocated->allocated_segment}, conventional)
         : std::expected<dosrecomp::runtime::int21_memory_result, dosrecomp::runtime::dos_error>{std::unexpected(dosrecomp::runtime::dos_error{"allocation failed"})};
-    if (!text || !character || !exit || bad || !allocated || !allocated->allocated_segment || !released ||
+    const dosrecomp::runtime::dos_clock clock{.year = 1993, .month = 5, .day = 1, .weekday = 6, .hour = 12, .minute = 34, .second = 56, .hundredths = 78};
+    const auto date = dosrecomp::runtime::int21_clock_dispatcher::dispatch({.ah = 0x2a}, clock);
+    const auto time = dosrecomp::runtime::int21_clock_dispatcher::dispatch({.ah = 0x2c}, clock);
+    if (!text || !character || !exit || bad || !allocated || !allocated->allocated_segment || !released || !date || !date->value ||
+        !time || !time->value || time->value->hour != 12 ||
         state.console_output != "Hi!" || state.exit_code != 7) {
         std::cerr << "failed INT 21h dispatch\n";
         return EXIT_FAILURE;
