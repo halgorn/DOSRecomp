@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace dosrecomp::ir {
@@ -20,6 +21,7 @@ struct ssa_value {
     register_id reg{};
     value_kind kind{};
     std::vector<std::size_t> inputs;
+    std::optional<std::uint16_t> constant;
 };
 
 /** A register-to-current-SSA-value mapping at one program point. */
@@ -39,6 +41,7 @@ public:
 
     [[nodiscard]] register_state entry_state() const noexcept;
     [[nodiscard]] std::size_t define(register_state& state, register_id reg, std::vector<std::size_t> inputs = {});
+    [[nodiscard]] std::size_t define_constant(register_state& state, register_id reg, std::uint16_t value);
     [[nodiscard]] register_state merge(const register_state& first, const register_state& second);
     [[nodiscard]] const std::vector<ssa_value>& values() const noexcept;
 
@@ -47,4 +50,3 @@ private:
 };
 
 } // namespace dosrecomp::ir
-

@@ -89,3 +89,10 @@ services remain separate additions.
 `virtual_drive` maps one absolute DOS drive into an explicit host root. It is a
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
 rejected before a filesystem operation is attempted.
+
+## Optimizer
+
+Constant propagation consumes immutable SSA values and computes facts without
+rewriting them. Direct constant definitions are preserved and phi values fold
+only when every incoming value is the same known 16-bit constant; malformed or
+forward SSA references are rejected.

@@ -29,7 +29,7 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
     const auto immediate = static_cast<std::uint16_t>(
         static_cast<std::uint16_t>(byte_at(code, instruction.offset + 1)) |
         (static_cast<std::uint16_t>(byte_at(code, instruction.offset + 2)) << 8U));
-    return semantic_effect{destination, ssa.define(state, destination), immediate};
+    return semantic_effect{destination, ssa.define_constant(state, destination, immediate), immediate};
 }
 
 } // namespace dosrecomp::semantics
