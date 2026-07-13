@@ -291,8 +291,7 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
                 } else if (op.kind == decoder::operand_kind::memory) {
                     target = "load_mem16(" + std::to_string(op.displacement) + ")";
                     for (std::uint8_t i = 0; i < op.address_register_count; ++i) {
-                        const auto r = op.address_registers[i];
-                        target += " + regs[" + std::to_string(word_reg_index(r)) + "]";
+                        target += " + regs[" + std::to_string(word_reg_index(op.address_registers[i])) + "]";
                     }
                 } else {
                     out << "  // unsupported indirect jump operand\n  syscall(SYS_exit, 1); return;\n";
@@ -301,8 +300,7 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
                 }
                 out << "  dispatch(" << target << ");\n";
             } else {
-                const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
-                out << "  " << block_label(target) << "();\n";
+                out << "  " << block_label(static_cast<std::size_t>(position + decoded->size + decoded->relative_target)) << "();\n";
             }
             position = next;
             break;
@@ -310,16 +308,13 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
         if (decoded->kind == decoder::instruction_kind::conditional_jump) {
             const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
             out << "  if (";
-            if (!emit_conditional(out, decoded->condition)) {
-                out << "/* unsupported cond */ false";
-            }
+            if (!emit_conditional(out, decoded->condition)) out << "/* unsupported cond */ false";
             out << ") " << block_label(target) << "(); else " << block_label(next) << "();\n";
             position = next;
             break;
         }
         if (decoded->kind == decoder::instruction_kind::return_) {
-            out << "  syscall(SYS_exit, regs[0] & 0xff);\n";
-            out << "  return;\n";
+            out << "  syscall(SYS_exit, regs[0] & 0xff);\n  return;\n";
             position = next;
             break;
         }
@@ -337,8 +332,7 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
             emit_arithmetic(out, *decoded);
             break;
         default:
-            out << "  // unsupported instruction at 0x" << std::hex << position << std::dec << "\n";
-            out << "  syscall(SYS_exit, 1); return;\n";
+            out << "  // unsupported instruction at 0x" << std::hex << position << std::dec << "\n  syscall(SYS_exit, 1); return;\n";
             position = next;
             break;
         }
@@ -362,26 +356,21 @@ collect_block_starts(const loader::program_image& image) {
                 const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, position);
                 if (!decoded) return std::unexpected(branching_compile_error{std::string{"cannot decode at "} + std::to_string(position) + ": " + decoded.error().message});
                 const auto next = position + decoded->size;
-                if (decoded->kind == decoder::instruction_kind::jump ||
-                    decoded->kind == decoder::instruction_kind::conditional_jump) {
+                const auto kind = decoded->kind;
+                if (kind == decoder::instruction_kind::jump || kind == decoder::instruction_kind::conditional_jump) {
                     const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
                     if (starts.insert(target).second) changed = true;
                 }
-                if (decoded->kind == decoder::instruction_kind::conditional_jump ||
-                    decoded->kind == decoder::instruction_kind::call ||
-                    (decoded->kind == decoder::instruction_kind::interrupt &&
-                     (decoded->interrupt_number == 0x21 || decoded->interrupt_number == 0x10 || decoded->interrupt_number == 0x16))) {
-                    if (next < image.bytes.size()) {
-                        if (starts.insert(next).second) changed = true;
-                    }
+                const bool falls_through = kind == decoder::instruction_kind::conditional_jump
+                    || kind == decoder::instruction_kind::call
+                    || (kind == decoder::instruction_kind::interrupt &&
+                        (decoded->interrupt_number == 0x21 || decoded->interrupt_number == 0x10 || decoded->interrupt_number == 0x16));
+                if (falls_through && next < image.bytes.size()) {
+                    if (starts.insert(next).second) changed = true;
                 }
-                if (decoded->kind == decoder::instruction_kind::jump ||
-                    decoded->kind == decoder::instruction_kind::conditional_jump ||
-                    decoded->kind == decoder::instruction_kind::return_ ||
-                    decoded->kind == decoder::instruction_kind::interrupt ||
-                    decoded->kind == decoder::instruction_kind::call) {
-                    break;
-                }
+                if (kind == decoder::instruction_kind::jump || kind == decoder::instruction_kind::conditional_jump ||
+                    kind == decoder::instruction_kind::return_ || kind == decoder::instruction_kind::interrupt ||
+                    kind == decoder::instruction_kind::call) break;
                 position = next;
             }
         }
@@ -395,6 +384,16 @@ collect_block_starts(const loader::program_image& image) {
     return starts;
 }
 
+void emit_image_array(std::ostream& out, const std::vector<std::byte>& bytes) {
+    out << "  static const uint8_t img[] = {";
+    for (std::size_t i = 0; i < bytes.size(); ++i) {
+        if (i % 16 == 0) out << "\n    ";
+        out << "0x" << std::hex << std::setw(2) << std::setfill('0')
+            << static_cast<unsigned>(std::to_integer<std::uint8_t>(bytes[i])) << std::dec << ",";
+    }
+    out << "\n  };\n";
+}
+
 [[nodiscard]] std::expected<void, branching_compile_error>
 write_main(std::ostream& out, const loader::program_image& image) {
     out << "int main() {\n";
@@ -402,33 +401,20 @@ write_main(std::ostream& out, const loader::program_image& image) {
     if (image.format == loader::executable_format::mz) {
         const auto base = static_cast<std::uint32_t>(image.entry_point.segment) * 16U;
         const auto seg = image.entry_point.segment;
-        out << "  static const uint8_t img[] = {";
-        for (std::size_t i = 0; i < image.bytes.size(); ++i) {
-            if (i % 16 == 0) out << "\n    ";
-            out << "0x" << std::hex << std::setw(2) << std::setfill('0')
-                << static_cast<unsigned>(std::to_integer<std::uint8_t>(image.bytes[i])) << std::dec << ",";
-        }
-        out << "\n  };\n";
+        emit_image_array(out, image.bytes);
         out << "  for (size_t i = 0; i < sizeof(img); ++i) mem[" << std::hex << base << " + i] = img[i];\n" << std::dec;
         for (const auto& reloc : image.relocations) {
             const auto offset = static_cast<std::uint32_t>(reloc.address.segment) * 16U + reloc.address.offset + base;
-            out << "  {\n";
-            out << "    uint16_t cur = static_cast<uint16_t>(mem[" << std::hex << offset << "]) | (static_cast<uint16_t>(mem[" << offset + 1 << "]) << 8);\n" << std::dec;
+            out << "  { uint16_t cur = static_cast<uint16_t>(mem[" << std::hex << offset
+                << "]) | (static_cast<uint16_t>(mem[" << offset + 1 << "]) << 8);\n" << std::dec;
             out << "    cur = static_cast<uint16_t>(cur + " << seg << ");\n";
             out << "    mem[" << std::hex << offset << "] = static_cast<uint8_t>(cur);\n" << std::dec;
-            out << "    mem[" << std::hex << offset + 1 << "] = static_cast<uint8_t>(cur >> 8);\n" << std::dec;
-            out << "  }\n";
+            out << "    mem[" << std::hex << offset + 1 << "] = static_cast<uint8_t>(cur >> 8); }\n" << std::dec;
         }
         out << "  regs[10] = " << image.initial_stack.segment << ";\n";
         out << "  regs[4] = " << image.initial_stack.offset << ";\n";
     } else {
-        out << "  static const uint8_t img[] = {";
-        for (std::size_t i = 0; i < image.bytes.size(); ++i) {
-            if (i % 16 == 0) out << "\n    ";
-            out << "0x" << std::hex << std::setw(2) << std::setfill('0')
-                << static_cast<unsigned>(std::to_integer<std::uint8_t>(image.bytes[i])) << std::dec << ",";
-        }
-        out << "\n  };\n";
+        emit_image_array(out, image.bytes);
         out << "  for (size_t i = 0; i < sizeof(img); ++i) mem[0x100 + i] = img[i];\n";
     }
     out << "  " << block_label(image.entry_offset()) << "();\n";
