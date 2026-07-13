@@ -90,11 +90,34 @@ exit_program_compiler::extract_exit_code(const loader::program_image& image) {
     const auto interrupt_offset = *interrupt_result;
     const auto effect = semantics::instruction_translator::translate(image.bytes, *move, ssa, state);
     if (effect) {
-        if (!is_exit_interrupt(image.bytes, interrupt_offset)) return std::unexpected(compile_error{"entry sequence does not terminate through INT 21h"});
-        if (effect->destination != ir::register_id::ax || !effect->immediate || (*effect->immediate >> 8U) != 0x4cU) {
+        if (effect->destination != ir::register_id::ax || !effect->immediate) {
             return std::unexpected(compile_error{"INT 21h exit requires MOV AX, 4Cxxh"});
         }
-        return static_cast<std::uint8_t>(*effect->immediate);
+        auto exit_value = *effect->immediate;
+        auto final_interrupt = interrupt_offset;
+        if (!is_exit_interrupt(image.bytes, final_interrupt)) {
+            const auto arithmetic = decoder::instruction_decoder::decode_at(image.bytes, final_interrupt);
+            if (!arithmetic || arithmetic->kind != decoder::instruction_kind::arithmetic || arithmetic->operand_count != 2 ||
+                arithmetic->operands[0].reg != decoder::register_name::ax || arithmetic->operands[1].width != decoder::operand_width::word) {
+                return std::unexpected(compile_error{"entry sequence does not terminate through INT 21h"});
+            }
+            const auto immediate = arithmetic->operands[1].immediate;
+            switch (arithmetic->alu) {
+            case decoder::alu_operation::add: exit_value = static_cast<std::uint16_t>(exit_value + immediate); break;
+            case decoder::alu_operation::subtract: exit_value = static_cast<std::uint16_t>(exit_value - immediate); break;
+            case decoder::alu_operation::bit_and: exit_value = static_cast<std::uint16_t>(exit_value & immediate); break;
+            case decoder::alu_operation::bit_or: exit_value = static_cast<std::uint16_t>(exit_value | immediate); break;
+            case decoder::alu_operation::bit_xor: exit_value = static_cast<std::uint16_t>(exit_value ^ immediate); break;
+            default: return std::unexpected(compile_error{"exit arithmetic operation is unsupported"});
+            }
+            const auto following = skip_nops(image.bytes, final_interrupt + arithmetic->size);
+            if (!following) return std::unexpected(following.error());
+            final_interrupt = *following;
+        }
+        if (!is_exit_interrupt(image.bytes, final_interrupt) || (exit_value >> 8U) != 0x4cU) {
+            return std::unexpected(compile_error{"entry sequence does not terminate through INT 21h exit"});
+        }
+        return static_cast<std::uint8_t>(exit_value);
     }
 
     const auto first_opcode = std::to_integer<std::uint8_t>(image.bytes[entry]);

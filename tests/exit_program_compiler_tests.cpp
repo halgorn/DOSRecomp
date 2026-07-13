@@ -33,6 +33,9 @@ int main() {
     const auto padded = dosrecomp::loader::binary_loader::load_bytes({b(0x90), b(0xb8), b(5), b(0x4c), b(0x90), b(0xcd), b(0x21)});
     const auto padded_elf = padded ? dosrecomp::compiler::exit_program_compiler::compile(*padded)
                                    : std::expected<std::vector<std::byte>, dosrecomp::compiler::compile_error>{std::unexpected(dosrecomp::compiler::compile_error{"padded load failed"})};
+    const auto arithmetic_exit = dosrecomp::loader::binary_loader::load_bytes({b(0xb8), b(2), b(0x4c), b(0x05), b(3), b(0), b(0xcd), b(0x21)});
+    const auto arithmetic_elf = arithmetic_exit ? dosrecomp::compiler::exit_program_compiler::compile(*arithmetic_exit)
+                                                : std::expected<std::vector<std::byte>, dosrecomp::compiler::compile_error>{std::unexpected(dosrecomp::compiler::compile_error{"arithmetic load failed"})};
     const auto console = dosrecomp::loader::binary_loader::load_bytes({
         b(0xba), b(12), b(1), b(0xb4), b(9), b(0xcd), b(0x21), b(0xb8), b(6), b(0x4c), b(0xcd), b(0x21),
         b('o'), b('k'), b('\n'), b('$')});
@@ -41,7 +44,7 @@ int main() {
     if (!elf || !exit_code || !llvm || llvm->find("ret i32 7") == std::string::npos || *exit_code != 7 || elf->size() != 132 || std::to_integer<unsigned char>((*elf)[126]) != 7 ||
         !byte_elf || std::to_integer<unsigned char>((*byte_elf)[126]) != 3 ||
         !reversed_byte_elf || std::to_integer<unsigned char>((*reversed_byte_elf)[126]) != 4 ||
-        !padded_elf || std::to_integer<unsigned char>((*padded_elf)[126]) != 5 ||
+        !padded_elf || std::to_integer<unsigned char>((*padded_elf)[126]) != 5 || !arithmetic_elf || std::to_integer<unsigned char>((*arithmetic_elf)[126]) != 5 ||
         !mz_elf || std::to_integer<unsigned char>((*mz_elf)[126]) != 9 || !console_elf || unsupported) {
         std::cerr << "failed end-to-end exit recompilation\n";
         return EXIT_FAILURE;
