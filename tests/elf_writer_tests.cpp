@@ -1,7 +1,13 @@
 #include "dosrecomp/backend/elf_writer.hpp"
 
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 int main() {
     const auto image = dosrecomp::backend::elf_writer::emit_exit_executable(7);
@@ -11,6 +17,24 @@ int main() {
         std::cerr << "failed ELF64 image emission\n";
         return EXIT_FAILURE;
     }
+    const auto path = std::filesystem::temp_directory_path() / ("dosrecomp-elf-" + std::to_string(getpid()));
+    {
+        std::ofstream output(path, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(image.data()), static_cast<std::streamsize>(image.size()));
+        if (!output) return EXIT_FAILURE;
+    }
+    if (chmod(path.c_str(), S_IRUSR | S_IWUSR | S_IXUSR) != 0) return EXIT_FAILURE;
+    const auto child = fork();
+    if (child == 0) {
+        execl(path.c_str(), path.c_str(), nullptr);
+        _exit(127);
+    }
+    int status = 0;
+    const auto waited = child > 0 ? waitpid(child, &status, 0) : -1;
+    std::filesystem::remove(path);
+    if (waited != child || !WIFEXITED(status) || WEXITSTATUS(status) != 7) {
+        std::cerr << "generated ELF did not execute with expected status\n";
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }
-
