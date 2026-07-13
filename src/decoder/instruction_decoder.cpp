@@ -18,16 +18,20 @@ namespace {
     return static_cast<std::int16_t>(value);
 }
 
+[[nodiscard]] std::uint8_t modrm_displacement_size(std::uint8_t modrm) {
+    const auto mode = modrm >> 6U;
+    const auto rm = modrm & 0x07U;
+    if (mode == 0 && rm == 6) return 2;
+    if (mode == 1) return 1;
+    if (mode == 2) return 2;
+    return 0;
+}
+
 [[nodiscard]] std::expected<std::uint8_t, decode_error>
 modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t immediate_size) {
     if (offset >= code.size()) return std::unexpected(decode_error{"truncated instruction at offset " + std::to_string(offset)});
     const auto modrm = byte_at(code, offset);
-    const auto mode = modrm >> 6U;
-    const auto rm = modrm & 0x07U;
-    std::uint8_t displacement_size = 0;
-    if (mode == 0 && rm == 6) displacement_size = 2;
-    if (mode == 1) displacement_size = 1;
-    if (mode == 2) displacement_size = 2;
+    const auto displacement_size = modrm_displacement_size(modrm);
     const auto size = static_cast<std::uint8_t>(2U + displacement_size + immediate_size);
     if (code.size() - offset < static_cast<std::size_t>(size - 1U)) {
         return std::unexpected(decode_error{"truncated instruction at offset " + std::to_string(offset - 1U)});
@@ -246,8 +250,21 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         const auto immediate_size = (opcode == 0xc7 || opcode == 0x81) ? 2U : 1U;
         const auto size = modrm_size(code, offset + 1, immediate_size);
         if (!size) return std::unexpected(size.error());
-        return instruction{opcode == 0xc6 || opcode == 0xc7 ? instruction_kind::move : instruction_kind::arithmetic,
-            offset, *size, 0, 0};
+        if (opcode == 0xc6 || opcode == 0xc7) {
+            const auto width = (opcode == 0xc6) ? operand_width::byte : operand_width::word;
+            const auto modrm = byte_at(code, offset + 1);
+            const auto disp_size = modrm_displacement_size(modrm);
+            const auto imm_offset = offset + 2 + disp_size;
+            const auto immediate = static_cast<std::uint16_t>(
+                (immediate_size == 1)
+                    ? byte_at(code, imm_offset)
+                    : byte_at(code, imm_offset) | (byte_at(code, imm_offset + 1) << 8U));
+            instruction result{instruction_kind::move, offset, *size, 0, 0,
+                {rm_operand(code, offset + 1, width, modrm),
+                 operand{operand_kind::immediate, width, register_name::al, immediate, 0}}, 2};
+            return result;
+        }
+        return instruction{instruction_kind::arithmetic, offset, *size, 0, 0};
     }
     if (opcode == 0xff) {
         const auto size = modrm_size(code, offset + 1, 0);

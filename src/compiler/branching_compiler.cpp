@@ -208,6 +208,26 @@ void emit_int16_runtime(std::ostream& out) {
     out << "  }\n";
 }
 
+[[nodiscard]] std::string emit_mem_addr(const decoder::operand& mem) {
+    if (mem.kind != decoder::operand_kind::memory) return "/* non-memory */";
+    bool uses_bp = false;
+    for (std::uint8_t i = 0; i < mem.address_register_count; ++i)
+        if (mem.address_registers[i] == decoder::register_name::bp) uses_bp = true;
+    const auto seg_reg = uses_bp ? decoder::register_name::ss : decoder::register_name::ds;
+    const auto seg_index = static_cast<std::size_t>(seg_reg) - static_cast<std::size_t>(decoder::register_name::ax);
+    std::ostringstream out;
+    out << "((static_cast<uint32_t>(regs[" << seg_index << "]) << 4) + static_cast<uint32_t>(static_cast<int32_t>(" << mem.displacement << ")";
+    for (std::uint8_t i = 0; i < mem.address_register_count; ++i)
+        out << " + regs[" << word_reg_index(mem.address_registers[i]) << "]";
+    out << "))";
+    return out.str();
+}
+void emit_mem_store(std::ostream& out, const std::string& addr, bool is_byte, const std::string& value) {
+    if (is_byte) { out << "  mem[" << addr << "] = " << value << ";\n"; return; }
+    out << "  mem[" << addr << "] = static_cast<uint8_t>(" << value << ");\n"
+        << "  mem[" << addr << " + 1] = static_cast<uint8_t>((" << value << ") >> 8);\n";
+}
+
 void emit_move_immediate(std::ostream& out, const decoder::instruction& decoded) {
     const auto& dst = decoded.operands[0];
     const auto width = dst.width;
@@ -217,6 +237,34 @@ void emit_move_immediate(std::ostream& out, const decoder::instruction& decoded)
         out << "  " << byte_reg_store(dst.reg, imm_str.str()) << ";\n";
     } else {
         out << "  " << word_reg_access(dst.reg) << " = 0x" << std::hex << imm << std::dec << ";\n";
+    }
+}
+
+void emit_move(std::ostream& out, const decoder::instruction& decoded) {
+    const auto& dst = decoded.operands[0];
+    const auto& src = decoded.operands[1];
+    const auto is_byte = dst.width == decoder::operand_width::byte;
+    if (dst.kind == decoder::operand_kind::memory) {
+        const auto addr = emit_mem_addr(dst);
+        if (src.kind == decoder::operand_kind::reg) {
+            const auto value = is_byte ? byte_reg_access(src.reg) : word_reg_access(src.reg);
+            emit_mem_store(out, addr, is_byte, value);
+        } else if (src.kind == decoder::operand_kind::immediate) {
+            std::ostringstream v; v << "0x" << std::hex << src.immediate << std::dec;
+            emit_mem_store(out, addr, is_byte, v.str());
+        } else out << "  // unsupported MOV memory source\n";
+        return;
+    }
+    if (src.kind == decoder::operand_kind::memory) {
+        const auto addr = emit_mem_addr(src);
+        if (is_byte) { std::string v = "mem[" + addr + "]"; out << "  " << byte_reg_store(dst.reg, v) << ";\n"; }
+        else { std::ostringstream v; v << "(static_cast<uint16_t>(mem[" << addr << "]) | (static_cast<uint16_t>(mem[" << addr << " + 1]) << 8))";
+               out << "  regs[" << word_reg_index(dst.reg) << "] = " << v.str() << ";\n"; }
+        return;
+    }
+    if (src.kind == decoder::operand_kind::reg) {
+        if (is_byte) out << "  " << byte_reg_store(dst.reg, byte_reg_access(src.reg)) << ";\n";
+        else out << "  regs[" << word_reg_index(dst.reg) << "] = regs[" << word_reg_index(src.reg) << "];\n";
     }
 }
 
@@ -332,6 +380,9 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
         switch (decoded->kind) {
         case decoder::instruction_kind::move_immediate:
             emit_move_immediate(out, *decoded);
+            break;
+        case decoder::instruction_kind::move:
+            emit_move(out, *decoded);
             break;
         case decoder::instruction_kind::arithmetic:
         case decoder::instruction_kind::compare:

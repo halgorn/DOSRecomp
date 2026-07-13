@@ -42,7 +42,11 @@ int main(int argc, char* argv[]) {
         const auto& image = *result;
         std::cout << "format: " << (image.format == dosrecomp::loader::executable_format::com ? "COM" : "MZ")
                   << "\nload module bytes: " << image.bytes.size()
-                  << "\nrelocations: " << image.relocations.size() << '\n';
+                  << "\nrelocations: " << image.relocations.size()
+                  << "\nentry: " << std::hex << image.entry_point.segment << ":" << image.entry_point.offset << std::dec
+                  << "\nstack: " << std::hex << image.initial_stack.segment << ":" << image.initial_stack.offset << std::dec << '\n';
+        const auto graph = dosrecomp::cfg::cfg_builder::build(result->bytes, result->entry_offset());
+        if (graph) std::cout << "blocks: " << graph->blocks.size() << '\n';
     }
     if (emit_cpp) {
         const auto cpp = dosrecomp::compiler::cpp_backend::emit(*result);
@@ -92,6 +96,7 @@ int main(int argc, char* argv[]) {
         std::cout << "}\n";
         return 0;
     }
+    if (verbose) std::cout << "compiling...\n";
     auto output_path = std::filesystem::path(argv[1]);
     if (explicit_output) output_path = argv[3];
     else output_path.replace_extension();
@@ -125,6 +130,9 @@ int main(int argc, char* argv[]) {
     if (error) {
         std::cerr << "dosrecomp: cannot make output executable: " << error.message() << '\n';
         return 1;
+    }
+    if (verbose) {
+        std::cout << "compiled " << bytes.size() << " bytes\n";
     }
     std::cout << "Wrote " << output_path.string() << '\n';
 }
