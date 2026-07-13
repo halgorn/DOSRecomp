@@ -66,6 +66,9 @@ ELF for the verified subset of DOS programs:
 * Conditional branches evaluated statically through the SSA flag chain
   (`JE`, `JNE`, `JB`, `JAE`, `JL`, `JGE`, `JS`, `JNS`, ...)
 * `INT 21h` `AH=09h` (`$`-terminated string write), `AH=02h` (write char), `AH=4Ch` (exit)
+* `INT 21h` `AH=3Dh`/`AH=3Eh`/`AH=3Fh`/`AH=40h` (open/close/read/write file)
+  on DOS handles ≥ 3; DOS handles 1 (stdout) and 2 (stderr) are also accepted
+  on `AH=3Eh`/`AH=40h` and routed to the matching Linux file descriptor
 * `INT 10h` `AH=0Eh` (teletype char), `AH=02h` (cursor positioning as a no-op)
 
 DOS runtime services exist as standalone libraries (`int10`, `int13`,
@@ -112,6 +115,53 @@ mov ah, 02h
 int 21h
 mov ax, 0x4c07
 int 21h
+
+; open "out.txt", write "hello", close, exit 0
+mov ah, 3dh          ; AH=3Dh open
+mov al, 01h          ; AL=01h write-only
+mov dx, fname
+int 21h
+mov bx, ax           ; file handle in BX
+mov ah, 40h          ; AH=40h write
+mov cx, 5
+mov dx, msg
+int 21h
+mov ah, 3eh          ; AH=3Eh close
+int 21h
+mov ax, 0x4c00
+int 21h
+fname: db "out.txt", 0
+msg:   db "hello"
+```
+
+Reads are resolved at compile time: opening a file with `AL=0` (read-only)
+loads its contents into the recompiler's DOS memory snapshot, so the next
+`INT 21h/AH=3Fh` simply copies the bytes into the buffer at `DS:DX` and
+returns the actual byte count in `AX`. The recom­piled binary never touches
+the host filesystem on a read; writes still go through Linux `sys_write`.
+
+```asm
+; open "input.txt", read 12 bytes, write to stdout, close, exit 0
+mov ah, 3dh          ; open
+mov al, 0            ; read-only
+mov dx, fname
+int 21h
+mov bx, ax           ; file handle in BX
+mov ah, 3fh          ; read
+mov cx, 12
+mov dx, buf
+int 21h
+mov cx, ax           ; bytes read
+mov ah, 40h          ; write to stdout
+mov bx, 1
+mov dx, buf
+int 21h
+mov ah, 3eh          ; close
+int 21h
+mov ax, 0x4c00
+int 21h
+fname: db "input.txt", 0
+buf:   times 12 db 0
 ```
 
 Emit readable C++ for the same verified subset:
