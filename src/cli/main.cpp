@@ -10,7 +10,7 @@
 
 namespace {
 void print_usage() {
-    std::cerr << "Usage: dosrecomp <input.com|input.exe> [-o output|--verbose|--emit-cfg|--emit-dot|--emit-ir|--emit-cpp]\n";
+    std::cerr << "Usage: dosrecomp <input.com|input.exe> [-o output|--verbose|--emit-cfg|--emit-dot|--emit-ir|--emit-cpp|--emit-llvm]\n";
 }
 }
 
@@ -25,8 +25,9 @@ int main(int argc, char* argv[]) {
     const bool emit_dot = option == "--emit-dot";
     const bool emit_ir = option == "--emit-ir";
     const bool emit_cpp = option == "--emit-cpp";
+    const bool emit_llvm = option == "--emit-llvm";
     const bool explicit_output = argc == 4 && std::string_view(argv[2]) == "-o";
-    if ((argc == 3 && !verbose && !emit_cfg && !emit_dot && !emit_ir && !emit_cpp) || (argc == 4 && !explicit_output)) {
+    if ((argc == 3 && !verbose && !emit_cfg && !emit_dot && !emit_ir && !emit_cpp && !emit_llvm) || (argc == 4 && !explicit_output)) {
         print_usage();
         return 2;
     }
@@ -48,6 +49,15 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         std::cout << "#include <cstdlib>\n\nint main() { return " << static_cast<unsigned>(*exit_code) << "; }\n";
+        return 0;
+    }
+    if (emit_llvm) {
+        const auto llvm = dosrecomp::compiler::exit_program_compiler::emit_llvm(*result);
+        if (!llvm) {
+            std::cerr << "dosrecomp: cannot emit LLVM IR: " << llvm.error().message << '\n';
+            return 1;
+        }
+        std::cout << *llvm;
         return 0;
     }
     if (emit_cfg || emit_dot || emit_ir) {

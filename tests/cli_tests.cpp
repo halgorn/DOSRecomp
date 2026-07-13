@@ -30,7 +30,7 @@ int run_output(const std::filesystem::path& executable) {
     return child > 0 && waitpid(child, &status, 0) == child && WIFEXITED(status) ? WEXITSTATUS(status) : 255;
 }
 
-std::pair<int, std::string> run_dot(const std::filesystem::path& executable, const std::filesystem::path& input) {
+std::pair<int, std::string> run_text_option(const std::filesystem::path& executable, const std::filesystem::path& input, const char* option) {
     int pipe_fds[2]{};
     if (pipe(pipe_fds) != 0) return {255, {}};
     const auto child = fork();
@@ -38,7 +38,7 @@ std::pair<int, std::string> run_dot(const std::filesystem::path& executable, con
         close(pipe_fds[0]);
         dup2(pipe_fds[1], STDOUT_FILENO);
         close(pipe_fds[1]);
-        execl(executable.c_str(), executable.c_str(), input.c_str(), "--emit-dot", nullptr);
+        execl(executable.c_str(), executable.c_str(), input.c_str(), option, nullptr);
         _exit(127);
     }
     close(pipe_fds[1]);
@@ -76,13 +76,15 @@ int main() {
     const auto output_status = compile_status == 0 ? run_output(output) : 255;
     const auto byte_compile_status = run(DOSRECOMP_CLI_PATH, byte_input, byte_output);
     const auto byte_output_status = byte_compile_status == 0 ? run_output(byte_output) : 255;
-    const auto [dot_status, dot_output] = run_dot(DOSRECOMP_CLI_PATH, input);
+    const auto [dot_status, dot_output] = run_text_option(DOSRECOMP_CLI_PATH, input, "--emit-dot");
+    const auto [llvm_status, llvm_output] = run_text_option(DOSRECOMP_CLI_PATH, input, "--emit-llvm");
     std::filesystem::remove(input);
     std::filesystem::remove(output);
     std::filesystem::remove(byte_input);
     std::filesystem::remove(byte_output);
     if (compile_status != 0 || output_status != 7 || byte_compile_status != 0 || byte_output_status != 3 ||
-        dot_status != 0 || dot_output.rfind("digraph cfg", 0) != 0) {
+        dot_status != 0 || dot_output.rfind("digraph cfg", 0) != 0 || llvm_status != 0 ||
+        llvm_output.find("ret i32 7") == std::string::npos) {
         std::cerr << "CLI recompilation integration test failed\n";
         return EXIT_FAILURE;
     }

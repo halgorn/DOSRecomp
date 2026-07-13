@@ -68,4 +68,12 @@ exit_program_compiler::compile(const loader::program_image& image) {
     return backend::elf_writer::emit_exit_executable(*exit_code);
 }
 
+std::expected<std::string, compile_error>
+exit_program_compiler::emit_llvm(const loader::program_image& image) {
+    const auto exit_code = extract_exit_code(image);
+    if (!exit_code) return std::unexpected(exit_code.error());
+    return "; ModuleID = 'dosrecomp'\nsource_filename = \"dosrecomp\"\n\ndefine i32 @main() {\n  ret i32 " +
+        std::to_string(static_cast<unsigned>(*exit_code)) + "\n}\n";
+}
+
 } // namespace dosrecomp::compiler

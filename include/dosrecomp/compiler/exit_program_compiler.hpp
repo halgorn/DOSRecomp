@@ -26,6 +26,10 @@ public:
 
     [[nodiscard]] static std::expected<std::vector<std::byte>, compile_error>
     compile(const loader::program_image& image);
+
+    /** Emits textual LLVM IR for the same verified DOS exit subset. */
+    [[nodiscard]] static std::expected<std::string, compile_error>
+    emit_llvm(const loader::program_image& image);
 };
 
 } // namespace dosrecomp::compiler

@@ -10,6 +10,7 @@ int main() {
     if (!loaded) return EXIT_FAILURE;
     const auto elf = dosrecomp::compiler::exit_program_compiler::compile(*loaded);
     const auto exit_code = dosrecomp::compiler::exit_program_compiler::extract_exit_code(*loaded);
+    const auto llvm = dosrecomp::compiler::exit_program_compiler::emit_llvm(*loaded);
     const auto unsupported = dosrecomp::compiler::exit_program_compiler::compile({
         .format = dosrecomp::loader::executable_format::com, .bytes = {b(0x90)},
         .entry_point = {0, 0x100}, .initial_stack = {}, .relocations = {}});
@@ -25,7 +26,7 @@ int main() {
     const auto padded = dosrecomp::loader::binary_loader::load_bytes({b(0x90), b(0xb8), b(5), b(0x4c), b(0x90), b(0xcd), b(0x21)});
     const auto padded_elf = padded ? dosrecomp::compiler::exit_program_compiler::compile(*padded)
                                    : std::expected<std::vector<std::byte>, dosrecomp::compiler::compile_error>{std::unexpected(dosrecomp::compiler::compile_error{"padded load failed"})};
-    if (!elf || !exit_code || *exit_code != 7 || elf->size() != 132 || std::to_integer<unsigned char>((*elf)[126]) != 7 ||
+    if (!elf || !exit_code || !llvm || llvm->find("ret i32 7") == std::string::npos || *exit_code != 7 || elf->size() != 132 || std::to_integer<unsigned char>((*elf)[126]) != 7 ||
         !byte_elf || std::to_integer<unsigned char>((*byte_elf)[126]) != 3 ||
         !padded_elf || std::to_integer<unsigned char>((*padded_elf)[126]) != 5 ||
         !mz_elf || std::to_integer<unsigned char>((*mz_elf)[126]) != 9 || unsupported) {

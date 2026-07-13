@@ -92,6 +92,12 @@ Emit readable C++ for that same verified subset:
 ./build/dosrecomp program.com --emit-cpp > program.cpp
 ```
 
+Emit textual LLVM IR for the same subset:
+
+```bash
+./build/dosrecomp program.com --emit-llvm > program.ll
+```
+
 Emit the currently supported direct-control-flow graph as GraphViz DOT:
 
 ```bash
