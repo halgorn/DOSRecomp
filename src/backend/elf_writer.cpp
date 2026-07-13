@@ -88,10 +88,41 @@ void emit_write_block(std::vector<std::byte>& image, std::size_t code_offset, st
 
 std::vector<std::byte>
 elf_writer::emit_multi_write_exit_executable(std::span<const write_call> writes, std::uint8_t exit_code) {
-    const auto code_size = per_write_code_size * writes.size() + exit_code_size;
+    return emit_syscall_program_executable(writes, {}, exit_code);
+}
+
+namespace {
+constexpr std::size_t per_read_code_size = 24;
+
+void emit_read_block(std::vector<std::byte>& image, std::size_t code_offset, std::size_t buffer_offset,
+                     const read_call& call) {
+    const auto fd = call.file_descriptor;
+    const auto size = call.max_bytes;
+    const auto displacement = static_cast<std::int32_t>(buffer_offset) - static_cast<std::int32_t>(code_offset + 17);
+    const std::array<std::byte, per_read_code_size> code = {
+        std::byte{0xb8}, std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0},
+        std::byte{0xbf}, static_cast<std::byte>(fd & 0xffU), static_cast<std::byte>((fd >> 8U) & 0xffU),
+        static_cast<std::byte>((fd >> 16U) & 0xffU), static_cast<std::byte>((fd >> 24U) & 0xffU),
+        std::byte{0x48}, std::byte{0x8d}, std::byte{0x35},
+        static_cast<std::byte>(displacement & 0xffU), static_cast<std::byte>((displacement >> 8U) & 0xffU),
+        static_cast<std::byte>((displacement >> 16U) & 0xffU), static_cast<std::byte>((displacement >> 24U) & 0xffU),
+        std::byte{0xba}, static_cast<std::byte>(size & 0xffU), static_cast<std::byte>((size >> 8U) & 0xffU),
+        static_cast<std::byte>((size >> 16U) & 0xffU), static_cast<std::byte>((size >> 24U) & 0xffU),
+        std::byte{0x0f}, std::byte{0x05},
+    };
+    std::copy(code.begin(), code.end(), image.begin() + static_cast<std::ptrdiff_t>(code_offset));
+}
+}
+
+std::vector<std::byte>
+elf_writer::emit_syscall_program_executable(std::span<const write_call> writes,
+                                           std::span<const read_call> reads,
+                                           std::uint8_t exit_code) {
+    const auto code_size = per_write_code_size * writes.size() + per_read_code_size * reads.size() + exit_code_size;
     const auto payload_start = code_offset + code_size;
     std::size_t total_payload = 0;
     for (const auto& call : writes) total_payload += call.payload.size();
+    for (const auto& call : reads) total_payload += call.max_bytes;
     std::vector<std::byte> image(payload_start + total_payload);
     emit_elf_header(image, code_size);
     std::size_t current_code = code_offset;
@@ -100,6 +131,11 @@ elf_writer::emit_multi_write_exit_executable(std::span<const write_call> writes,
         emit_write_block(image, current_code, current_payload, call);
         current_code += per_write_code_size;
         current_payload += call.payload.size();
+    }
+    for (const auto& call : reads) {
+        emit_read_block(image, current_code, current_payload, call);
+        current_code += per_read_code_size;
+        current_payload += call.max_bytes;
     }
     const std::array<std::byte, exit_code_size> code = {
         std::byte{0xb8}, std::byte{0x3c}, std::byte{0}, std::byte{0}, std::byte{0},

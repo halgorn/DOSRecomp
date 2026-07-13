@@ -8,10 +8,16 @@
 
 namespace dosrecomp::backend {
 
-/** A single write(1, buf, len) syscall embedded in a generated executable. */
+/** A single write(fd, buf, len) syscall embedded in a generated executable. */
 struct write_call {
     std::span<const std::byte> payload;
     std::uint32_t file_descriptor{1};
+};
+
+/** A single read(fd, buf, len) syscall embedded in a generated executable. */
+struct read_call {
+    std::uint32_t file_descriptor{0};
+    std::uint32_t max_bytes{1};
 };
 
 /** Emits a standalone ELF64 executable that terminates through Linux syscall exit. */
@@ -26,6 +32,16 @@ public:
     /** Emits an ELF64 executable that performs multiple write syscalls and then exits. */
     [[nodiscard]] static std::vector<std::byte>
     emit_multi_write_exit_executable(std::span<const write_call> writes, std::uint8_t exit_code);
+
+    /**
+     * Emits an ELF64 executable driven by a sequence of write and read syscalls.
+     * Each read syscall stores the returned byte count in rax (read-only); the
+     * compiled payload is responsible for extracting AL where DOS semantics need it.
+     */
+    [[nodiscard]] static std::vector<std::byte>
+    emit_syscall_program_executable(std::span<const write_call> writes,
+                                    std::span<const read_call> reads,
+                                    std::uint8_t exit_code);
 };
 
 } // namespace dosrecomp::backend

@@ -111,6 +111,14 @@ translate_block(const loader::program_image& image, const cfg::control_flow_grap
                 position += decoded->size;
                 continue;
             }
+            if (ah_value == 0x02U) {
+                const auto dl_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::dl)];
+                const auto dl_constant = resolve_exit_code(ts.ssa, ts.state, dl_ssa);
+                ts.write_payloads.push_back({{static_cast<std::byte>(dl_constant & 0xffU)}});
+                ts.writes.push_back(backend::write_call{std::span<const std::byte>{ts.write_payloads.back().data(), 1}, 2});
+                position += decoded->size;
+                continue;
+            }
             return std::unexpected(straight_line_compile_error{"unsupported INT 21h function AH=" + std::to_string(static_cast<unsigned>(ah_value))});
         }
         if (decoded->kind == decoder::instruction_kind::return_) {

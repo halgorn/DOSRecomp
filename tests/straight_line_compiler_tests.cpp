@@ -53,6 +53,34 @@ int main() {
         std::cerr << "failed straight-line byte-form exit (MOV AH,4Ch MOV AL,9)\n";
         return EXIT_FAILURE;
     }
+    const auto char_program = dosrecomp::loader::binary_loader::load_bytes({b(0xb2), b('A'), b(0xb4), b(0x02), b(0xcd), b(0x21), b(0xb4), b(0x4c), b(0xb0), b(7), b(0xcd), b(0x21)});
+    const auto char_elf = char_program ? dosrecomp::compiler::straight_line_compiler::compile(*char_program) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"char load failed"})};
+    if (!char_elf) {
+        std::cerr << "failed to compile INT 21h AH=02h write-char program\n";
+        return EXIT_FAILURE;
+    }
+    const auto char_path = std::filesystem::temp_directory_path() / ("dosrecomp-char-" + std::to_string(getpid()));
+    {
+        std::ofstream output(char_path, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(char_elf->data()), static_cast<std::streamsize>(char_elf->size()));
+    }
+    std::filesystem::permissions(char_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    const auto out_path = char_path.string() + ".out";
+    const auto err_path = char_path.string() + ".err";
+    const auto cmd = char_path.string() + " > " + out_path + " 2> " + err_path;
+    const auto char_status = std::system(cmd.c_str());
+    std::ifstream stdout_file(out_path, std::ios::binary);
+    std::ifstream stderr_file(err_path, std::ios::binary);
+    std::string stdout_text{std::istreambuf_iterator<char>{stdout_file}, {}};
+    std::string stderr_text{std::istreambuf_iterator<char>{stderr_file}, {}};
+    std::filesystem::remove(char_path);
+    std::filesystem::remove(out_path);
+    std::filesystem::remove(err_path);
+    if (char_status == -1 || !WIFEXITED(char_status) || WEXITSTATUS(char_status) != 7 ||
+        stderr_text != "A" || !stdout_text.empty()) {
+        std::cerr << "INT 21h AH=02h did not write to stderr as expected\n";
+        return EXIT_FAILURE;
+    }
     const auto non_exit = dosrecomp::loader::binary_loader::load_bytes({b(0x90)});
     const auto non_exit_elf = non_exit ? dosrecomp::compiler::straight_line_compiler::compile(*non_exit) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"non-exit load failed"})};
     if (non_exit_elf) {
