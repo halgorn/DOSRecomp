@@ -51,6 +51,7 @@ struct operand {
     std::array<register_name, 2> address_registers{};
     std::uint8_t address_register_count{};
     std::int16_t displacement{};
+    bool direct_address{};
 };
 
 /** One instruction boundary and its optional relative target. */

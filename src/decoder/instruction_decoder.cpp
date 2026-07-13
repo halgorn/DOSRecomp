@@ -73,18 +73,20 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
     const auto mode = modrm >> 6U;
     const auto rm = modrm & 7U;
     std::int16_t displacement = 0;
+    bool direct_address = false;
     std::uint8_t count = rm <= 3 ? 2 : 1;
     if (mode == 0 && rm == 6) {
         displacement = static_cast<std::int16_t>(static_cast<std::uint16_t>(byte_at(code, offset + 1)) |
                                                  (static_cast<std::uint16_t>(byte_at(code, offset + 2)) << 8U));
         count = 0;
+        direct_address = true;
     } else if (mode == 1) {
         displacement = static_cast<std::int8_t>(byte_at(code, offset + 1));
     } else if (mode == 2) {
         displacement = static_cast<std::int16_t>(static_cast<std::uint16_t>(byte_at(code, offset + 1)) |
                                                  (static_cast<std::uint16_t>(byte_at(code, offset + 2)) << 8U));
     }
-    return operand{operand_kind::memory, width, register_name::al, 0, modrm, addresses[rm], count, displacement};
+    return operand{operand_kind::memory, width, register_name::al, 0, modrm, addresses[rm], count, displacement, direct_address};
 }
 [[nodiscard]] instruction accumulator_immediate(instruction_kind kind, const std::vector<std::byte>& code,
                                                  std::size_t offset, std::uint8_t opcode) {

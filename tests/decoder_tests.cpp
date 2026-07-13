@@ -53,7 +53,7 @@ int main() {
         expect(call && call->kind == instruction_kind::call && call->relative_target == 16, "decode relative call") &&
         expect(!truncated, "reject truncated instruction") && expect(!unknown, "reject unknown opcode");
     return (passed && expect(modrm && modrm->kind == instruction_kind::move && modrm->size == 4, "decode ModR/M displacement") &&
-        expect(modrm && modrm->operand_count == 2 && modrm->operands[0].kind == operand_kind::memory && modrm->operands[0].address_registers[0] == register_name::bp && modrm->operands[0].displacement == 0x1234 && modrm->operands[1].reg == register_name::ax, "decode memory MOV operands") &&
+        expect(modrm && modrm->operand_count == 2 && modrm->operands[0].kind == operand_kind::memory && modrm->operands[0].address_registers[0] == register_name::bp && modrm->operands[0].displacement == 0x1234 && !modrm->operands[0].direct_address && modrm->operands[1].reg == register_name::ax, "decode memory MOV operands") &&
         expect(register_modrm && register_modrm->operands[0].reg == register_name::bx && register_modrm->operands[1].reg == register_name::ax, "decode register ModR/M MOV operands") &&
         expect(arithmetic && arithmetic->kind == instruction_kind::arithmetic && arithmetic->size == 4, "decode arithmetic immediate") &&
         expect(accumulator && accumulator->kind == instruction_kind::compare && accumulator->size == 3 && accumulator->operand_count == 2 &&
