@@ -1,4 +1,5 @@
 #include "dosrecomp/compiler/straight_line_compiler.hpp"
+#include "dosrecomp/compiler/branching_compiler.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -190,6 +191,51 @@ int main() {
     std::filesystem::remove(executable);
     if (status == -1 || !WIFEXITED(status) || WEXITSTATUS(status) != 5) {
         std::cerr << "native straight-line recompilation did not exit with 5\n";
+        return EXIT_FAILURE;
+    }
+    const auto runtime_branch = std::vector<std::byte>{
+        b(0xb4), b(0x01),
+        b(0xcd), b(0x21),
+        b(0x3c), b(0x79),
+        b(0x74), b(0x05),
+        b(0xb8), b(0x01), b(0x4c),
+        b(0xeb), b(0x03),
+        b(0xb8), b(0x02), b(0x4c),
+        b(0xcd), b(0x21),
+    };
+    const auto rb_image = dosrecomp::loader::binary_loader::load_bytes(runtime_branch);
+    if (!rb_image) {
+        std::cerr << "failed to load runtime branch program\n";
+        return EXIT_FAILURE;
+    }
+    const auto rb_elf = dosrecomp::compiler::branching_compiler::compile(*rb_image);
+    if (!rb_elf) {
+        std::cerr << "failed to compile runtime branch program: " << rb_elf.error().message << "\n";
+        return EXIT_FAILURE;
+    }
+    const auto rb_path = std::filesystem::temp_directory_path() / ("dosrecomp-rb-" + std::to_string(getpid()));
+    {
+        std::ofstream output(rb_path, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(rb_elf->data()), static_cast<std::streamsize>(rb_elf->size()));
+    }
+    std::filesystem::permissions(rb_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    auto run_with_stdin = [&](const char* input) {
+        const auto pid = fork();
+        if (pid == 0) {
+            const std::string cmd = std::string{"echo "} + input + " | " + rb_path.string();
+            execl("/bin/sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
+            _exit(127);
+        }
+        int st = 0;
+        waitpid(pid, &st, 0);
+        return st;
+    };
+    const auto y_status = run_with_stdin("y");
+    const auto n_status = run_with_stdin("n");
+    std::filesystem::remove(rb_path);
+    if (!WIFEXITED(y_status) || WEXITSTATUS(y_status) != 2 ||
+        !WIFEXITED(n_status) || WEXITSTATUS(n_status) != 1) {
+        std::cerr << "runtime branch program did not exit 2/1 for y/n\n";
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
