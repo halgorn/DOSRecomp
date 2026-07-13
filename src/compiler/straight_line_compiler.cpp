@@ -139,15 +139,18 @@ translate_block(const loader::program_image& image, const cfg::control_flow_grap
         if (decoded->kind == decoder::instruction_kind::return_) {
             return std::unexpected(straight_line_compile_error{"control flow ends without INT 21h exit"});
         }
-        if (decoded->kind == decoder::instruction_kind::jump) {
-            const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
-            auto found = graph.blocks.size();
-            for (std::size_t index = 0; index < graph.blocks.size(); ++index) {
-                if (graph.blocks[index].start == target) { found = index; break; }
+if (decoded->kind == decoder::instruction_kind::jump) {
+                const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
+                auto found = graph.blocks.size();
+                for (std::size_t index = 0; index < graph.blocks.size(); ++index) {
+                    if (graph.blocks[index].start == target) { found = index; break; }
+                }
+                if (found == graph.blocks.size()) {
+                    position = target;
+                    continue;
+                }
+                return translate_block(image, graph, found, ts);
             }
-            if (found == graph.blocks.size()) return std::unexpected(straight_line_compile_error{"straight-line compiler cannot resolve unconditional jump target"});
-            return translate_block(image, graph, found, ts);
-        }
         if (decoded->kind == decoder::instruction_kind::conditional_jump || decoded->kind == decoder::instruction_kind::loop) {
             const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
             auto target_block = graph.blocks.size();

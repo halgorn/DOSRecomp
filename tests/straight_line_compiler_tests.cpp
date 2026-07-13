@@ -99,6 +99,46 @@ int main() {
         std::cerr << "INT 10h AH=0Eh program did not exit 7\n";
         return EXIT_FAILURE;
     }
+    const auto integrated = dosrecomp::loader::binary_loader::load_bytes({
+        b(0xb8), b(5), b(0x00),          // mov ax, 5
+        b(0xb4), b(0x00),                // mov ah, 0
+        b(0x3d), b(5), b(0x00),          // cmp ax, 5
+        b(0x75), b(7),                   // jne +7  (skip hi block to offset 17)
+        b(0xba), b(0x21), b(0x01),       // mov dx, 0x0121 = "hi"
+        b(0xb8), b(0x00), b(0x09),       // mov ax, 0x0900
+        b(0xcd), b(0x21),               // int 21h print "hi"
+        b(0xeb), b(8),                   // jmp +8  (skip bye block to offset 28)
+        b(0xba), b(0x24), b(0x01),       // mov dx, 0x0124 = "bye"
+        b(0xb8), b(0x00), b(0x09),       // mov ax, 0x0900
+        b(0xcd), b(0x21),               // int 21h print "bye"
+        b(0xb8), b(8), b(0x4c),         // mov ax, 0x4c08
+        b(0xcd), b(0x21),               // int 21h exit
+        b('h'), b('i'), b('$'),          // "hi$"  (offset 33)
+        b('b'), b('y'), b('e'), b('$')   // "bye$" (offset 36)
+    });
+    const auto integrated_elf = integrated ? dosrecomp::compiler::straight_line_compiler::compile(*integrated) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"integrated load failed"})};
+    if (!integrated_elf) {
+        std::cerr << "failed to compile integrated branch+console program\n";
+        return EXIT_FAILURE;
+    }
+    const auto integrated_path = std::filesystem::temp_directory_path() / ("dosrecomp-int-" + std::to_string(getpid()));
+    {
+        std::ofstream output(integrated_path, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(integrated_elf->data()), static_cast<std::streamsize>(integrated_elf->size()));
+    }
+    std::filesystem::permissions(integrated_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    const auto integrated_out = integrated_path.string() + ".captured";
+    const auto integrated_cmd = integrated_path.string() + " > " + integrated_out;
+    const auto integrated_status = std::system(integrated_cmd.c_str());
+    std::ifstream captured(integrated_out, std::ios::binary);
+    std::string integrated_text{std::istreambuf_iterator<char>{captured}, {}};
+    std::filesystem::remove(integrated_path);
+    std::filesystem::remove(integrated_out);
+    if (integrated_status == -1 || !WIFEXITED(integrated_status) || WEXITSTATUS(integrated_status) != 8 ||
+        integrated_text != "hi") {
+        std::cerr << "integrated branch program did not exit 8 or did not print 'hi'\n";
+        return EXIT_FAILURE;
+    }
     const auto non_exit = dosrecomp::loader::binary_loader::load_bytes({b(0x90)});
     const auto non_exit_elf = non_exit ? dosrecomp::compiler::straight_line_compiler::compile(*non_exit) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"non-exit load failed"})};
     if (non_exit_elf) {
