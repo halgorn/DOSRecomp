@@ -17,6 +17,12 @@ int main() {
     dosrecomp::runtime::virtual_file_system files{dosrecomp::runtime::virtual_drive(root)};
     const auto handle = files.open_read("C:\\HELLO.TXT");
     const auto data = handle ? files.read(*handle, 8) : std::expected<std::vector<std::byte>, dosrecomp::runtime::file_error>{std::unexpected(dosrecomp::runtime::file_error{"open failed"})};
+    const auto seek = handle ? files.seek(*handle, -2, dosrecomp::runtime::seek_origin::end)
+                             : std::expected<std::uint32_t, dosrecomp::runtime::file_error>{std::unexpected(dosrecomp::runtime::file_error{"open failed"})};
+    const auto tail = seek && handle ? files.read(*handle, 2)
+                                     : std::expected<std::vector<std::byte>, dosrecomp::runtime::file_error>{std::unexpected(dosrecomp::runtime::file_error{"seek failed"})};
+    const auto negative = handle ? files.seek(*handle, -1, dosrecomp::runtime::seek_origin::begin)
+                                 : std::expected<std::uint32_t, dosrecomp::runtime::file_error>{std::unexpected(dosrecomp::runtime::file_error{"open failed"})};
     const auto closed = handle ? files.close(*handle) : std::expected<void, dosrecomp::runtime::file_error>{std::unexpected(dosrecomp::runtime::file_error{"open failed"})};
     const auto traversal = files.open_read("C:\\..\\secret");
     const auto output = files.open_write("C:\\OUTPUT.BIN");
@@ -27,7 +33,8 @@ int main() {
     char first = 0;
     output_file.read(&first, 1);
     std::filesystem::remove_all(root);
-    if (!handle || !data || data->size() != 5 || std::to_integer<unsigned char>((*data)[0]) != 'h' || !closed || traversal ||
+    if (!handle || !data || data->size() != 5 || std::to_integer<unsigned char>((*data)[0]) != 'h' || !seek || *seek != 3 || !tail ||
+        tail->size() != 2 || std::to_integer<unsigned char>((*tail)[0]) != 'l' || negative || !closed || traversal ||
         !output || !written || *written != 2 || !output_closed || first != 0x12) {
         std::cerr << "failed virtual DOS file system\n";
         return EXIT_FAILURE;

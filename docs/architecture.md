@@ -160,10 +160,11 @@ sandboxed state without exposing any host path.
 It does not inherit host environment variables and validates keys and values
 before retaining them.
 
-`int21_file_dispatcher` maps DOS `3Ch`, `3Dh`, `3Eh`, `3Fh`, and `40h`
-requests directly to those virtual handles. Path decoding remains a caller
-responsibility, keeping the interrupt boundary independent of guest-memory
-representation.
+`int21_file_dispatcher` maps DOS `3Ch`, `3Dh`, `3Eh`, `3Fh`, `40h`, and `42h`
+requests directly to those virtual handles. Seek accepts the DOS begin/current/
+end origins, a signed 32-bit displacement, and rejects negative or out-of-range
+result positions. Path decoding remains a caller responsibility, keeping the
+interrupt boundary independent of guest-memory representation.
 
 ## Optimizer
 

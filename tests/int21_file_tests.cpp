@@ -16,6 +16,9 @@ int main() {
     const auto read = opened && opened->handle
         ? dosrecomp::runtime::int21_file_dispatcher::dispatch({.ah = 0x3f, .handle = *opened->handle, .count = 8, .data = {}}, files)
         : std::expected<dosrecomp::runtime::int21_file_result, dosrecomp::runtime::int21_file_error>{std::unexpected(dosrecomp::runtime::int21_file_error{"open failed"})};
+    const auto seek = opened && opened->handle
+        ? dosrecomp::runtime::int21_file_dispatcher::dispatch({.ah = 0x42, .handle = *opened->handle, .data = {}, .offset = -1, .origin = 2}, files)
+        : std::expected<dosrecomp::runtime::int21_file_result, dosrecomp::runtime::int21_file_error>{std::unexpected(dosrecomp::runtime::int21_file_error{"open failed"})};
     const auto close = opened && opened->handle
         ? dosrecomp::runtime::int21_file_dispatcher::dispatch({.ah = 0x3e, .handle = *opened->handle, .data = {}}, files)
         : std::expected<dosrecomp::runtime::int21_file_result, dosrecomp::runtime::int21_file_error>{std::unexpected(dosrecomp::runtime::int21_file_error{"open failed"})};
@@ -27,7 +30,8 @@ int main() {
         ? dosrecomp::runtime::int21_file_dispatcher::dispatch({.ah = 0x3e, .handle = *writable->handle, .data = {}}, files)
         : std::expected<dosrecomp::runtime::int21_file_result, dosrecomp::runtime::int21_file_error>{std::unexpected(dosrecomp::runtime::int21_file_error{"open failed"})};
     std::filesystem::remove_all(root);
-    if (!opened || !opened->handle || !read || read->data.size() != 3 || std::to_integer<unsigned char>(read->data[0]) != 'a' || !close ||
+    if (!opened || !opened->handle || !read || read->data.size() != 3 || std::to_integer<unsigned char>(read->data[0]) != 'a' || !seek ||
+        !seek->position || *seek->position != 2 || !close ||
         !written || written->bytes_transferred != 1 || !write_close) {
         std::cerr << "failed INT 21h file dispatch\n";
         return EXIT_FAILURE;

@@ -54,6 +54,33 @@ std::expected<std::size_t, file_error> virtual_file_system::write(std::uint16_t 
     return data.size();
 }
 
+std::expected<std::uint32_t, file_error>
+virtual_file_system::seek(std::uint16_t handle, std::int32_t offset, seek_origin origin) {
+    const auto found = files_.find(handle);
+    if (found == files_.end()) return std::unexpected(file_error{"DOS file handle is invalid"});
+    const auto direction = origin == seek_origin::begin ? std::ios::beg
+                         : origin == seek_origin::current ? std::ios::cur
+                                                          : std::ios::end;
+    auto& stream = *found->second.stream;
+    stream.clear();
+    if (found->second.readable) {
+        stream.seekg(static_cast<std::streamoff>(offset), direction);
+        const auto position = static_cast<std::streamoff>(stream.tellg());
+        if (!stream || position < 0 || static_cast<std::uint64_t>(position) > std::numeric_limits<std::uint32_t>::max()) {
+            stream.clear();
+            return std::unexpected(file_error{"DOS file seek is outside the supported range"});
+        }
+        return static_cast<std::uint32_t>(position);
+    }
+    stream.seekp(static_cast<std::streamoff>(offset), direction);
+    const auto position = static_cast<std::streamoff>(stream.tellp());
+    if (!stream || position < 0 || static_cast<std::uint64_t>(position) > std::numeric_limits<std::uint32_t>::max()) {
+        stream.clear();
+        return std::unexpected(file_error{"DOS file seek is outside the supported range"});
+    }
+    return static_cast<std::uint32_t>(position);
+}
+
 std::expected<void, file_error> virtual_file_system::close(std::uint16_t handle) {
     const auto removed = files_.erase(handle);
     if (removed == 0) return std::unexpected(file_error{"DOS file handle is invalid"});
