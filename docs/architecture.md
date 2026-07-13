@@ -123,6 +123,11 @@ state without changing DOS-visible behavior.
 probe (`AH=01h`) over a caller-owned queue, keeping platform input policy out
 of translated program semantics.
 
+`bios_timer` provides a caller-driven 18.2 Hz BIOS tick counter with a
+deterministic midnight rollover count. `INT 1Ah/AH=00h` returns the current
+ticks and consumes that count, so a translated program never needs to read a
+host clock to observe BIOS time.
+
 `INT 13h` provides validated `AH=02h` CHS reads from an in-memory virtual disk
 mapped as drive `80h`. Geometry, sector ranges, and image bounds are checked
 before data is returned.

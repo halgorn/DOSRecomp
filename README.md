@@ -63,7 +63,7 @@ verified DOS exit subset; it rejects other programs with context rather than
 changing their behavior.
 
 Implemented runtime foundations include text video (`INT 10h`), virtual disk
-reads (`INT 13h`), keyboard queues (`INT 16h`), selected console/memory/clock
+reads (`INT 13h`), keyboard queues (`INT 16h`), BIOS timer ticks (`INT 1Ah`), selected console/memory/clock
 services (`INT 21h`), conventional memory, a sandboxed DOS drive, and
 read/write/seek DOS file handles. The supported instruction semantics and backend
 lowering remain incomplete; full 8086 program recompilation is active work.
