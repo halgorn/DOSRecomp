@@ -31,6 +31,13 @@ enum class register_name : std::uint8_t {
 /** Operand category. Memory remains explicit until effective-address lowering. */
 enum class operand_kind : std::uint8_t { none, reg, immediate, memory };
 
+/** 8086 condition encoded by Jcc; `always` is used by non-conditional instructions. */
+enum class branch_condition : std::uint8_t {
+    overflow, not_overflow, below, above_or_equal, equal, not_equal, below_or_equal,
+    above, sign, not_sign, parity, not_parity, less, greater_or_equal, less_or_equal,
+    greater, always
+};
+
 /** A decoded operand; memory forms retain their ModR/M byte for later lowering. */
 struct operand {
     operand_kind kind{operand_kind::none};
@@ -52,6 +59,7 @@ struct instruction {
     std::uint8_t interrupt_number{};
     std::array<operand, 2> operands{};
     std::uint8_t operand_count{};
+    branch_condition condition{branch_condition::always};
 };
 
 /** A malformed, truncated, or not-yet-supported instruction. */

@@ -48,7 +48,7 @@ int main() {
         move->operands[0].kind == operand_kind::reg && move->operands[0].reg == register_name::ax &&
         move->operands[1].immediate == 0x1234, "decode MOV immediate operands") &&
         expect(byte_move && byte_move->operands[0].reg == register_name::ah && byte_move->operands[1].immediate == 0x4c, "decode byte MOV operands") &&
-        expect(branch && branch->kind == instruction_kind::conditional_jump && branch->relative_target == -4, "decode conditional branch") &&
+        expect(branch && branch->kind == instruction_kind::conditional_jump && branch->relative_target == -4 && branch->condition == branch_condition::equal, "decode conditional branch") &&
         expect(call && call->kind == instruction_kind::call && call->relative_target == 16, "decode relative call") &&
         expect(!truncated, "reject truncated instruction") && expect(!unknown, "reject unknown opcode");
     return (passed && expect(modrm && modrm->kind == instruction_kind::move && modrm->size == 4, "decode ModR/M displacement") &&

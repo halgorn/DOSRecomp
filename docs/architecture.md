@@ -38,6 +38,9 @@ displacement for later effective-address lowering.
 Accumulator-immediate arithmetic and comparison forms also expose their
 accumulator and immediate operands, providing the verified input for flag and
 branch semantics.
+Short conditional branches preserve their exact 8086 condition (`JE`, `JNE`,
+signed and unsigned relations, and flag tests), rather than exposing only a
+generic conditional edge.
 8086 segment, LOCK, and REP prefix combinations are included in instruction
 boundaries and are bounded to the architectural 15-byte instruction maximum.
 Far-pointer loads and 8087 escape encodings are also bounded and labeled, but
