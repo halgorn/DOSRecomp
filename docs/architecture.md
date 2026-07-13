@@ -38,6 +38,8 @@ displacement for later effective-address lowering.
 `effective_address_resolver` consumes these operands and calculates only the
 wrapping 16-bit offset; segment selection and memory access remain separate
 layers.
+`physical_address` then translates a real-mode `segment:offset` pair to its
+20-bit physical address, including the architectural `10FFEFh` upper bound.
 Accumulator-immediate arithmetic and comparison forms also expose their
 accumulator and immediate operands, providing the verified input for flag and
 branch semantics.
