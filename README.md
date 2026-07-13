@@ -67,11 +67,14 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Inspect a DOS binary:
+Compile a supported DOS binary to a native executable:
 
 ```bash
-./build/dosrecomp program.exe --verbose
+./build/dosrecomp program.com -o program_linux
 ```
+
+The currently executable end-to-end subset is `MOV AX, 4Cxxh; INT 21h`; other
+program shapes are rejected with context while translation coverage expands.
 
 Emit the currently supported direct-control-flow graph as GraphViz DOT:
 

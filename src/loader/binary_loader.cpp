@@ -80,7 +80,7 @@ std::expected<program_image, load_error> binary_loader::load_file(const std::fil
         return std::unexpected(load_error{"cannot open '" + path.string() + "'"});
     }
     std::vector<char> raw((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    if (!input.eof()) {
+    if (input.bad()) {
         return std::unexpected(load_error{"cannot read '" + path.string() + "'"});
     }
     std::vector<std::byte> bytes;

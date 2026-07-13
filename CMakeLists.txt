@@ -77,7 +77,7 @@ target_link_libraries(dosrecomp_compiler PUBLIC dosrecomp::loader dosrecomp::dec
 target_compile_options(dosrecomp_compiler PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 add_executable(dosrecomp src/cli/main.cpp)
-target_link_libraries(dosrecomp PRIVATE dosrecomp::loader dosrecomp::cfg dosrecomp::ir)
+target_link_libraries(dosrecomp PRIVATE dosrecomp::loader dosrecomp::cfg dosrecomp::ir dosrecomp::compiler)
 target_compile_options(dosrecomp PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 if(DOSRECOMP_BUILD_TESTS)
@@ -134,4 +134,9 @@ if(DOSRECOMP_BUILD_TESTS)
     target_link_libraries(exit_program_compiler_tests PRIVATE dosrecomp::compiler)
     target_compile_options(exit_program_compiler_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     add_test(NAME exit_program_compiler_tests COMMAND exit_program_compiler_tests)
+    add_executable(cli_tests tests/cli_tests.cpp)
+    add_dependencies(cli_tests dosrecomp)
+    target_compile_definitions(cli_tests PRIVATE DOSRECOMP_CLI_PATH="$<TARGET_FILE:dosrecomp>")
+    target_compile_options(cli_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    add_test(NAME cli_tests COMMAND cli_tests)
 endif()

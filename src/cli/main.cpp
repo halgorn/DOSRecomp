@@ -1,18 +1,21 @@
 #include "dosrecomp/loader/binary_loader.hpp"
 #include "dosrecomp/cfg/cfg_builder.hpp"
+#include "dosrecomp/compiler/exit_program_compiler.hpp"
 #include "dosrecomp/ir/control_flow_ir.hpp"
 
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string_view>
 
 namespace {
 void print_usage() {
-    std::cerr << "Usage: dosrecomp <input.com|input.exe> [--verbose|--emit-cfg|--emit-ir]\n";
+    std::cerr << "Usage: dosrecomp <input.com|input.exe> [-o output|--verbose|--emit-cfg|--emit-ir]\n";
 }
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2 || argc > 3) {
+    if (argc < 2 || argc > 4) {
         print_usage();
         return 2;
     }
@@ -20,7 +23,8 @@ int main(int argc, char* argv[]) {
     const bool verbose = option == "--verbose";
     const bool emit_cfg = option == "--emit-cfg";
     const bool emit_ir = option == "--emit-ir";
-    if (argc == 3 && !verbose && !emit_cfg && !emit_ir) {
+    const bool explicit_output = argc == 4 && std::string_view(argv[2]) == "-o";
+    if ((argc == 3 && !verbose && !emit_cfg && !emit_ir) || (argc == 4 && !explicit_output)) {
         print_usage();
         return 2;
     }
@@ -65,5 +69,30 @@ int main(int argc, char* argv[]) {
         std::cout << "}\n";
         return 0;
     }
-    std::cout << "Loaded successfully. Recompilation pipeline is not implemented yet.\n";
+    auto output_path = std::filesystem::path(argv[1]);
+    if (explicit_output) output_path = argv[3];
+    else output_path.replace_extension();
+    if (output_path.empty()) {
+        std::cerr << "dosrecomp: cannot infer an output path\n";
+        return 1;
+    }
+    const auto executable = dosrecomp::compiler::exit_program_compiler::compile(*result);
+    if (!executable) {
+        std::cerr << "dosrecomp: cannot compile: " << executable.error().message << '\n';
+        return 1;
+    }
+    std::ofstream output(output_path, std::ios::binary | std::ios::trunc);
+    output.write(reinterpret_cast<const char*>(executable->data()), static_cast<std::streamsize>(executable->size()));
+    if (!output) {
+        std::cerr << "dosrecomp: cannot write '" << output_path.string() << "'\n";
+        return 1;
+    }
+    output.close();
+    std::error_code error;
+    std::filesystem::permissions(output_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add, error);
+    if (error) {
+        std::cerr << "dosrecomp: cannot make output executable: " << error.message() << '\n';
+        return 1;
+    }
+    std::cout << "Wrote " << output_path.string() << '\n';
 }
