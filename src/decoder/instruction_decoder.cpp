@@ -252,8 +252,17 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
     if (opcode == 0xff) {
         const auto size = modrm_size(code, offset + 1, 0);
         if (!size) return std::unexpected(size.error());
-        const auto extension = (byte_at(code, offset + 1) >> 3U) & 0x07U;
-        if (extension >= 2 && extension <= 5) {
+        const auto modrm = byte_at(code, offset + 1);
+        const auto extension = (modrm >> 3U) & 0x07U;
+        if (extension == 2 || extension == 4) {
+            const auto is_call = extension == 2;
+            instruction result{is_call ? instruction_kind::call : instruction_kind::jump,
+                offset, *size, 0, 0, {}, 1, branch_condition::always,
+                alu_operation::none, false, true};
+            result.operands[0] = rm_operand(code, offset + 2, operand_width::word, modrm);
+            return result;
+        }
+        if (extension >= 3 && extension <= 5) {
             return std::unexpected(decode_error{"indirect 8086 control flow is not supported"});
         }
         return instruction{extension == 6 ? instruction_kind::stack : instruction_kind::arithmetic, offset, *size, 0, 0};

@@ -97,6 +97,10 @@ void emit_runtime_header(std::ostream& out) {
     out << "static int next_fake_handle = 3;\n";
     out << "static int handle_to_fd[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};\n";
     out << "\n";
+    out << "static inline uint16_t load_mem16(uint32_t base, int16_t disp = 0) {\n";
+    out << "    const uint32_t linear = (static_cast<uint32_t>(regs[11]) << 4) + static_cast<uint32_t>(static_cast<int32_t>(base) + static_cast<int32_t>(disp));\n";
+    out << "    return static_cast<uint16_t>(static_cast<uint16_t>(mem[linear]) | (static_cast<uint16_t>(mem[linear + 1]) << 8));\n";
+    out << "}\n";
     out << "static inline void update_flags_cmp(uint16_t a, uint16_t b, bool is_byte) {\n";
     out << "    uint16_t r;\n";
     out << "    if (is_byte) {\n";
@@ -113,6 +117,7 @@ void emit_runtime_header(std::ostream& out) {
     out << "             | (a < b ? 1u : 0u);\n";
     out << "    }\n";
     out << "}\n";
+    out << "static void dispatch(uint32_t target);\n";
     out << "\n";
 }
 
@@ -294,8 +299,27 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
             continue;
         }
         if (decoded->kind == decoder::instruction_kind::jump) {
-            const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
-            out << "  " << block_label(target) << "();\n";
+            if (decoded->indirect) {
+                const auto& op = decoded->operands[0];
+                std::string target;
+                if (op.kind == decoder::operand_kind::reg) {
+                    target = word_reg_access(op.reg);
+                } else if (op.kind == decoder::operand_kind::memory) {
+                    target = "load_mem16(" + std::to_string(op.displacement) + ")";
+                    for (std::uint8_t i = 0; i < op.address_register_count; ++i) {
+                        const auto r = op.address_registers[i];
+                        target += " + regs[" + std::to_string(word_reg_index(r)) + "]";
+                    }
+                } else {
+                    out << "  // unsupported indirect jump operand\n  syscall(SYS_exit, 1); return;\n";
+                    position = next;
+                    break;
+                }
+                out << "  dispatch(" << target << ");\n";
+            } else {
+                const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
+                out << "  " << block_label(target) << "();\n";
+            }
             position = next;
             break;
         }
@@ -377,6 +401,12 @@ collect_block_starts(const loader::program_image& image) {
             }
         }
     }
+    for (std::size_t pos = 0; pos < image.bytes.size(); ) {
+        const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, pos);
+        if (!decoded) break;
+        starts.insert(pos);
+        pos += decoded->size;
+    }
     return starts;
 }
 
@@ -412,6 +442,19 @@ write_main(std::ostream& out, const loader::program_image& image) {
     return {};
 }
 
+[[nodiscard]] std::expected<void, branching_compile_error>
+emit_dispatch(std::ostream& out, const std::set<std::size_t>& targets) {
+    out << "static void dispatch(uint32_t target) {\n";
+    out << "    switch (target) {\n";
+    for (const auto t : targets) {
+        out << "    case 0x" << std::hex << t << std::dec << ": " << block_label(t) << "(); return;\n";
+    }
+    out << "    default: syscall(SYS_exit, 1); return;\n";
+    out << "    }\n";
+    out << "}\n\n";
+    return {};
+}
+
 [[nodiscard]] std::expected<std::string, branching_compile_error>
 emit_c_runtime(const loader::program_image& image) {
     const auto starts = collect_block_starts(image);
@@ -426,6 +469,8 @@ emit_c_runtime(const loader::program_image& image) {
         const auto result = emit_block_at(out, image, start);
         if (!result) return std::unexpected(result.error());
     }
+    const auto dispatch_result = emit_dispatch(out, *starts);
+    if (!dispatch_result) return std::unexpected(dispatch_result.error());
     const auto main_result = write_main(out, image);
     if (!main_result) return std::unexpected(main_result.error());
     return out.str();

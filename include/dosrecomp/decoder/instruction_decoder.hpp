@@ -66,6 +66,7 @@ struct instruction {
     branch_condition condition{branch_condition::always};
     alu_operation alu{alu_operation::none};
     bool stack_pop{false};
+    bool indirect{false};
 };
 
 /** A malformed, truncated, or not-yet-supported instruction. */
