@@ -16,7 +16,8 @@ origin therefore maps to index zero.
 
 The loader has no dependencies beyond the C++ standard library. Decoder and CFG
 modules will consume `program_image`; applying relocation values requires a
-chosen load segment and is intentionally deferred to the runtime/link stage.
+chosen load segment and is provided by `binary_loader::apply_relocations`, which
+returns a relocated copy of the image.
 
 Current limitations: only COM and real-mode MZ containers are recognized. DOS
 extenders, protected mode, and malformed headers are rejected or unsupported.

@@ -55,8 +55,7 @@ struct load_error {
  * Loads DOS program containers while validating all on-disk bounds.
  *
  * COM files are exposed at their conventional offset 0100h. MZ relocation
- * entries are retained; relocation application requires the eventual runtime
- * load segment and therefore belongs to the runtime/linking boundary.
+ * entries are retained and can be applied to an explicit load segment.
  */
 class binary_loader final {
 public:
@@ -65,6 +64,10 @@ public:
 
     [[nodiscard]] static std::expected<program_image, load_error>
     load_bytes(const std::vector<std::byte>& file);
+
+    /** Returns a relocated MZ image without mutating the original input image. */
+    [[nodiscard]] static std::expected<program_image, load_error>
+    apply_relocations(const program_image& image, std::uint16_t load_segment);
 };
 
 } // namespace dosrecomp::loader

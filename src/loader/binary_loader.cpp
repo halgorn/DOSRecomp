@@ -12,6 +12,11 @@ namespace {
            static_cast<std::uint16_t>(std::to_integer<unsigned char>(bytes[offset + 1])) << 8U;
 }
 
+void write_u16(std::vector<std::byte>& bytes, std::size_t offset, std::uint16_t value) {
+    bytes[offset] = static_cast<std::byte>(value & 0xffU);
+    bytes[offset + 1] = static_cast<std::byte>(value >> 8U);
+}
+
 [[nodiscard]] std::expected<program_image, load_error>
 parse_mz(const std::vector<std::byte>& file) {
     constexpr std::size_t minimum_header_size = 28;
@@ -105,6 +110,23 @@ binary_loader::load_bytes(const std::vector<std::byte>& file) {
         .initial_stack = {0, 0xfffe},
         .relocations = {},
     };
+}
+
+std::expected<program_image, load_error>
+binary_loader::apply_relocations(const program_image& image, std::uint16_t load_segment) {
+    if (image.format != executable_format::mz) {
+        return std::unexpected(load_error{"COM images do not contain MZ relocations"});
+    }
+    auto relocated = image;
+    for (const auto& entry : relocated.relocations) {
+        const auto offset = static_cast<std::size_t>(entry.address.segment) * 16U + entry.address.offset;
+        if (offset > relocated.bytes.size() || relocated.bytes.size() - offset < 2U) {
+            return std::unexpected(load_error{"MZ relocation points outside the load module"});
+        }
+        const auto value = static_cast<std::uint16_t>(read_u16(relocated.bytes, offset) + load_segment);
+        write_u16(relocated.bytes, offset, value);
+    }
+    return relocated;
 }
 
 } // namespace dosrecomp::loader

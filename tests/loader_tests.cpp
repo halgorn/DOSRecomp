@@ -31,11 +31,15 @@ bool test_mz_with_relocation() {
     file[6] = b(1); file[8] = b(2); file[20] = b(0); file[22] = b(0); file[24] = b(28);
     file[28] = b(0); file[29] = b(0); file[30] = b(0); file[31] = b(0);
     const auto result = binary_loader::load_bytes(file);
+    const auto relocated = result ? binary_loader::apply_relocations(*result, 0x1234)
+                                  : std::expected<dosrecomp::loader::program_image, dosrecomp::loader::load_error>{std::unexpected(dosrecomp::loader::load_error{"load failed"})};
     return expect(result.has_value(), "load valid MZ") &&
            expect(result->bytes.size() == 16, "strip MZ header") &&
            expect(result->relocations.size() == 1, "parse relocation") &&
            expect(result->format == dosrecomp::loader::executable_format::mz, "identify MZ") &&
-           expect(result->entry_offset() == 0, "map MZ entry to image offset");
+           expect(result->entry_offset() == 0, "map MZ entry to image offset") &&
+           expect(relocated && std::to_integer<unsigned char>(relocated->bytes[0]) == 0x34 &&
+               std::to_integer<unsigned char>(relocated->bytes[1]) == 0x12, "apply MZ relocation");
 }
 
 bool test_reject_invalid_inputs() {
