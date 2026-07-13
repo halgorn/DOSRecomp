@@ -106,6 +106,10 @@ of translated program semantics.
 mapped as drive `80h`. Geometry, sector ranges, and image bounds are checked
 before data is returned.
 
+`conventional_memory` implements the 640 KB DOS pool as a first-fit allocator
+in 16-byte paragraphs. It rejects zero or exhausted allocations, validates
+release ownership, and coalesces adjacent free blocks.
+
 `virtual_drive` maps one absolute DOS drive into an explicit host root. It is a
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
 rejected before a filesystem operation is attempted.
