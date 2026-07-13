@@ -132,7 +132,7 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
             ? instruction_kind::compare : instruction_kind::arithmetic;
         return instruction{kind, offset, *size, 0, 0};
     }
-    if ((opcode >= 0x88 && opcode <= 0x8e) || opcode == 0x8d || opcode == 0x8f) {
+    if ((opcode >= 0x88 && opcode <= 0x8e) || opcode == 0x8d || opcode == 0x8f || opcode == 0xc4 || opcode == 0xc5) {
         const auto size = modrm_size(code, offset + 1, 0);
         if (!size) return std::unexpected(size.error());
         return instruction{instruction_kind::move, offset, *size, 0, 0};
@@ -172,6 +172,11 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         const auto size = modrm_size(code, offset + 1, 0);
         if (!size) return std::unexpected(size.error());
         return instruction{instruction_kind::arithmetic, offset, *size, 0, 0};
+    }
+    if (opcode >= 0xd8 && opcode <= 0xdf) {
+        const auto size = modrm_size(code, offset + 1, 0);
+        if (!size) return std::unexpected(size.error());
+        return instruction{instruction_kind::coprocessor, offset, *size, 0, 0};
     }
     if (opcode == 0xcd) {
         if (code.size() - offset < 2) return truncated(offset);

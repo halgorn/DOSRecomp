@@ -32,6 +32,8 @@ It also determines boundaries for common arithmetic, data-movement, stack, and
 immediate ModR/M encodings, including 16-bit addressing displacements.
 8086 segment, LOCK, and REP prefix combinations are included in instruction
 boundaries and are bounded to the architectural 15-byte instruction maximum.
+Far-pointer loads and 8087 escape encodings are also bounded and labeled, but
+their operand semantics remain deferred to the semantic translation layer.
 
 ## CFG
 
