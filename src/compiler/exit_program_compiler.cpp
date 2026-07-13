@@ -46,19 +46,22 @@ exit_program_compiler::extract_exit_code(const loader::program_image& image) {
     }
 
     const auto first_opcode = std::to_integer<std::uint8_t>(image.bytes[entry]);
-    if (first_opcode != 0xb4 || move->size != 2 || image.bytes.size() - entry < 2 ||
-        std::to_integer<std::uint8_t>(image.bytes[entry + 1]) != 0x4c) {
+    if ((first_opcode != 0xb0 && first_opcode != 0xb4) || move->size != 2 || image.bytes.size() - entry < 2) {
         return std::unexpected(compile_error{"cannot translate entry instruction: " + effect.error().message});
     }
+    const auto first_immediate = std::to_integer<std::uint8_t>(image.bytes[entry + 1]);
     const auto low_move = decoder::instruction_decoder::decode_at(image.bytes, interrupt_offset);
     const auto byte_interrupt_result = low_move ? skip_nops(image.bytes, interrupt_offset + low_move->size)
                                                 : std::expected<std::size_t, compile_error>{std::unexpected(compile_error{"cannot decode MOV AL, immediate"})};
     if (!low_move || low_move->size != 2 || interrupt_offset + 2 > image.bytes.size() ||
-        std::to_integer<std::uint8_t>(image.bytes[interrupt_offset]) != 0xb0 ||
         !byte_interrupt_result || !is_exit_interrupt(image.bytes, *byte_interrupt_result)) {
-        return std::unexpected(compile_error{"INT 21h exit requires MOV AL, immediate after MOV AH, 4Ch"});
+        return std::unexpected(compile_error{"INT 21h exit requires two byte-register MOV instructions before the interrupt"});
     }
-    return std::to_integer<std::uint8_t>(image.bytes[interrupt_offset + 1]);
+    const auto second_opcode = std::to_integer<std::uint8_t>(image.bytes[interrupt_offset]);
+    const auto second_immediate = std::to_integer<std::uint8_t>(image.bytes[interrupt_offset + 1]);
+    if (first_opcode == 0xb4 && first_immediate == 0x4c && second_opcode == 0xb0) return second_immediate;
+    if (first_opcode == 0xb0 && second_opcode == 0xb4 && second_immediate == 0x4c) return first_immediate;
+    return std::unexpected(compile_error{"INT 21h exit requires MOV AH, 4Ch and MOV AL, immediate"});
 }
 
 std::expected<std::vector<std::byte>, compile_error>
