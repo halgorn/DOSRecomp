@@ -212,10 +212,99 @@ straight_line_compiler::compile(const loader::program_image& image) {
 
 std::expected<std::string, straight_line_compile_error>
 straight_line_compiler::emit_llvm(const loader::program_image& image) {
-    const auto exit_code = extract_exit_code(image);
-    if (!exit_code) return std::unexpected(exit_code.error());
-    return "; ModuleID = 'dosrecomp'\nsource_filename = \"dosrecomp\"\n\ndefine i32 @main() {\n  ret i32 " +
-        std::to_string(static_cast<unsigned>(*exit_code)) + "\n}\n";
+    const auto graph = cfg::cfg_builder::build(image.bytes, image.entry_offset());
+    if (!graph) return std::unexpected(straight_line_compile_error{std::string{"cannot build CFG: "} + graph.error().message});
+    const auto ir = ir::control_flow_lowerer::lower(*graph);
+    if (!ir) return std::unexpected(straight_line_compile_error{std::string{"cannot lower IR: "} + ir.error().message});
+    if (graph->blocks.empty()) return std::unexpected(straight_line_compile_error{"no reachable blocks"});
+    ir::register_ssa_builder ssa;
+    auto state = ssa.entry_state();
+    decoder::register_values registers{};
+    registers[static_cast<std::size_t>(decoder::register_name::sp)] = 0xfffe;
+    runtime::real_mode_memory memory;
+    if (image.format == loader::executable_format::mz) {
+        const auto first_byte = static_cast<std::uint32_t>(image.entry_point.segment) * 16U;
+        const auto loaded = memory.write(first_byte, std::span<const std::byte>{image.bytes.data(), image.bytes.size()});
+        if (!loaded) return std::unexpected(straight_line_compile_error{std::string{"cannot load MZ: "} + loaded.error().message});
+    } else {
+        const auto loaded = memory.write(0x100, std::span<const std::byte>{image.bytes.data(), image.bytes.size()});
+        if (!loaded) return std::unexpected(straight_line_compile_error{std::string{"cannot load COM: "} + loaded.error().message});
+    }
+    std::ostringstream out;
+    out << "; ModuleID = 'dosrecomp'\nsource_filename = \"dosrecomp\"\n\n";
+    out << "define i32 @main() {\nentry:\n";
+    std::size_t position = graph->blocks.front().start;
+    std::uint16_t exit_code_value = 0;
+    bool saw_exit = false;
+    while (position < image.bytes.size()) {
+        const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, position);
+        if (!decoded) return std::unexpected(straight_line_compile_error{std::string{"cannot decode at "} + std::to_string(position) + ": " + decoded.error().message});
+        if (decoded->kind == decoder::instruction_kind::interrupt) {
+            const auto ah_ssa = state.values[static_cast<std::size_t>(ir::register_id::ah)];
+            std::uint16_t ah_const = 0;
+            std::size_t cursor = ah_ssa;
+            while (cursor < ssa.values().size()) {
+                const auto& v = ssa.values()[cursor];
+                if (v.constant) { ah_const = *v.constant; break; }
+                if (v.inputs.empty()) break;
+                cursor = v.inputs.front();
+            }
+            const auto ax_ssa = state.values[static_cast<std::size_t>(ir::register_id::ax)];
+            std::uint16_t ax_const = 0;
+            cursor = ax_ssa;
+            while (cursor < ssa.values().size()) {
+                const auto& v = ssa.values()[cursor];
+                if (v.constant) { ax_const = *v.constant; break; }
+                if (v.inputs.empty()) break;
+                cursor = v.inputs.front();
+            }
+            const auto ah_value = ah_const != 0 || ah_ssa == ax_ssa ? static_cast<std::uint8_t>(ah_const) : static_cast<std::uint8_t>(ax_const >> 8U);
+            if (ah_value != 0x4cU) return std::unexpected(straight_line_compile_error{"non-exit INT 21h not supported in LLVM emit"});
+            const auto al_ssa = state.values[static_cast<std::size_t>(ir::register_id::al)];
+            std::uint16_t al_const = 0;
+            cursor = al_ssa;
+            while (cursor < ssa.values().size()) {
+                const auto& v = ssa.values()[cursor];
+                if (v.constant) { al_const = *v.constant; break; }
+                if (v.inputs.empty()) break;
+                cursor = v.inputs.front();
+            }
+            exit_code_value = al_const != 0 || al_ssa == ax_ssa ? static_cast<std::uint8_t>(al_const) : static_cast<std::uint8_t>(ax_const & 0xffU);
+            saw_exit = true;
+            break;
+        }
+        const auto effect = semantics::instruction_translator::translate(image.bytes, *decoded, ssa, state, &registers, &memory);
+        if (!effect) return std::unexpected(straight_line_compile_error{std::string{"cannot translate at "} + std::to_string(position) + ": " + effect.error().message});
+        const auto& value = ssa.values()[effect->ssa_value];
+        static const std::array<std::string_view, 18> names{
+            "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh",
+            "ax", "bx", "cx", "dx", "si", "di", "bp", "sp", "flags", "any"
+        };
+        const auto name = std::string(names[static_cast<std::size_t>(value.reg)]) + "_" + std::to_string(value.id);
+        if (value.constant) {
+            out << "  %" << name << " = add i16 0, " << *value.constant << "\n";
+        } else if (value.operation && value.inputs.size() == 2) {
+            const auto& left = ssa.values()[value.inputs[0]];
+            const auto& right = ssa.values()[value.inputs[1]];
+            std::string op;
+            switch (*value.operation) {
+            case ir::operation_kind::add: op = "add"; break;
+            case ir::operation_kind::subtract: op = "sub"; break;
+            case ir::operation_kind::bit_and: op = "and"; break;
+            case ir::operation_kind::bit_or: op = "or"; break;
+            case ir::operation_kind::bit_xor: op = "xor"; break;
+            case ir::operation_kind::compare: op = "sub"; break;
+            case ir::operation_kind::test: op = "and"; break;
+            }
+            out << "  %" << name << " = " << op << " i16 %"
+                << names[static_cast<std::size_t>(left.reg)] << "_" << left.id
+                << ", %" << names[static_cast<std::size_t>(right.reg)] << "_" << right.id << "\n";
+        }
+        position += decoded->size;
+    }
+    if (!saw_exit) return std::unexpected(straight_line_compile_error{"straight-line program must terminate with INT 21h"});
+    out << "  ret i32 " << static_cast<unsigned>(exit_code_value) << "\n}\n";
+    return out.str();
 }
 
 } // namespace dosrecomp::compiler
