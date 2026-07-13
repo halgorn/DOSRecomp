@@ -39,6 +39,7 @@ int main() {
     const auto shift = instruction_decoder::decode_at({b(0xd1), b(0x66), b(0xfe)}, 0);
     const auto repeated_string = instruction_decoder::decode_at({b(0xf3), b(0xa4)}, 0);
     const auto segment_move = instruction_decoder::decode_at({b(0x26), b(0x8b), b(0x07)}, 0);
+    const auto repeated_segment_string = instruction_decoder::decode_at({b(0xf3), b(0x26), b(0xa4)}, 0);
     const bool passed = expect(move && move->size == 3 && move->kind == instruction_kind::move_immediate, "decode MOV immediate") &&
         expect(branch && branch->kind == instruction_kind::conditional_jump && branch->relative_target == -4, "decode conditional branch") &&
         expect(call && call->kind == instruction_kind::call && call->relative_target == 16, "decode relative call") &&
@@ -61,5 +62,6 @@ int main() {
         expect(decimal_adjust && decimal_adjust->kind == instruction_kind::arithmetic, "decode decimal adjustment") &&
         expect(shift && shift->kind == instruction_kind::arithmetic && shift->size == 3, "decode shift group") &&
         expect(repeated_string && repeated_string->kind == instruction_kind::string && repeated_string->size == 2, "decode REP string") &&
-        expect(segment_move && segment_move->kind == instruction_kind::move && segment_move->size == 3, "decode segment override")) ? EXIT_SUCCESS : EXIT_FAILURE;
+        expect(segment_move && segment_move->kind == instruction_kind::move && segment_move->size == 3, "decode segment override") &&
+        expect(repeated_segment_string && repeated_segment_string->kind == instruction_kind::string && repeated_segment_string->size == 3, "decode combined prefixes")) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

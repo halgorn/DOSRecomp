@@ -53,15 +53,22 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
     }
     const auto opcode = byte_at(code, offset);
     if (is_prefix(opcode)) {
-        if (code.size() - offset < 2) return truncated(offset);
-        if (is_prefix(byte_at(code, offset + 1))) {
-            return std::unexpected(decode_error{"multiple 8086 instruction prefixes are not supported"});
+        std::size_t next = offset;
+        std::uint8_t prefix_count = 0;
+        while (next < code.size() && is_prefix(byte_at(code, next))) {
+            if (prefix_count == 15) return std::unexpected(decode_error{"8086 instruction has too many prefixes"});
+            ++prefix_count;
+            ++next;
         }
-        const auto decoded = decode_at(code, offset + 1);
+        if (next == code.size()) return truncated(offset);
+        const auto decoded = decode_at(code, next);
         if (!decoded) return std::unexpected(decoded.error());
         auto prefixed = *decoded;
+        if (prefixed.size > static_cast<std::uint8_t>(15U - prefix_count)) {
+            return std::unexpected(decode_error{"8086 instruction exceeds the 15-byte limit"});
+        }
         prefixed.offset = offset;
-        ++prefixed.size;
+        prefixed.size = static_cast<std::uint8_t>(prefixed.size + prefix_count);
         return prefixed;
     }
     const auto relative8 = [&]() -> std::expected<instruction, decode_error> {
