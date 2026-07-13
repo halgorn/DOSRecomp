@@ -60,6 +60,13 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
         {operand{operand_kind::reg, width, register_for(encoding, width), 0, 0},
          operand{operand_kind::immediate, width, register_name::al, immediate, 0}}, 2};
 }
+[[nodiscard]] operand register_operand(operand_width width, std::uint8_t encoding) {
+    return operand{operand_kind::reg, width, register_for(encoding, width), 0, 0};
+}
+[[nodiscard]] operand rm_operand(operand_width width, std::uint8_t modrm) {
+    if ((modrm >> 6U) == 3) return register_operand(width, modrm & 7U);
+    return operand{operand_kind::memory, width, register_name::al, 0, modrm};
+}
 } // namespace
 
 std::expected<instruction, decode_error>
@@ -150,7 +157,18 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
             ? instruction_kind::compare : instruction_kind::arithmetic;
         return instruction{kind, offset, *size, 0, 0};
     }
-    if ((opcode >= 0x88 && opcode <= 0x8e) || opcode == 0x8d || opcode == 0x8f || opcode == 0xc4 || opcode == 0xc5) {
+    if (opcode >= 0x88 && opcode <= 0x8b) {
+        const auto size = modrm_size(code, offset + 1, 0);
+        if (!size) return std::unexpected(size.error());
+        const auto width = (opcode & 1U) == 0 ? operand_width::byte : operand_width::word;
+        const auto modrm = byte_at(code, offset + 1);
+        const auto reg = register_operand(width, (modrm >> 3U) & 7U);
+        const auto rm = rm_operand(width, modrm);
+        const auto destination = (opcode & 2U) == 0 ? rm : reg;
+        const auto source = (opcode & 2U) == 0 ? reg : rm;
+        return instruction{instruction_kind::move, offset, *size, 0, 0, {destination, source}, 2};
+    }
+    if ((opcode >= 0x8c && opcode <= 0x8e) || opcode == 0x8d || opcode == 0x8f || opcode == 0xc4 || opcode == 0xc5) {
         const auto size = modrm_size(code, offset + 1, 0);
         if (!size) return std::unexpected(size.error());
         return instruction{instruction_kind::move, offset, *size, 0, 0};

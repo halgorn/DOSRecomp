@@ -21,6 +21,7 @@ int main() {
     const auto truncated = instruction_decoder::decode_at({b(0xe8)}, 0);
     const auto unknown = instruction_decoder::decode_at({b(0xff)}, 0);
     const auto modrm = instruction_decoder::decode_at({b(0x89), b(0x86), b(0x34), b(0x12)}, 0);
+    const auto register_modrm = instruction_decoder::decode_at({b(0x8b), b(0xd8)}, 0);
     const auto arithmetic = instruction_decoder::decode_at({b(0x83), b(0x6e), b(0xfe), b(0x01)}, 0);
     const auto accumulator = instruction_decoder::decode_at({b(0x3d), b(0x00), b(0x00)}, 0);
     const auto flag = instruction_decoder::decode_at({b(0xfd)}, 0);
@@ -51,6 +52,8 @@ int main() {
         expect(call && call->kind == instruction_kind::call && call->relative_target == 16, "decode relative call") &&
         expect(!truncated, "reject truncated instruction") && expect(!unknown, "reject unknown opcode");
     return (passed && expect(modrm && modrm->kind == instruction_kind::move && modrm->size == 4, "decode ModR/M displacement") &&
+        expect(modrm && modrm->operand_count == 2 && modrm->operands[0].kind == operand_kind::memory && modrm->operands[1].reg == register_name::ax, "decode memory MOV operands") &&
+        expect(register_modrm && register_modrm->operands[0].reg == register_name::bx && register_modrm->operands[1].reg == register_name::ax, "decode register ModR/M MOV operands") &&
         expect(arithmetic && arithmetic->kind == instruction_kind::arithmetic && arithmetic->size == 4, "decode arithmetic immediate") &&
         expect(accumulator && accumulator->kind == instruction_kind::compare && accumulator->size == 3, "decode accumulator immediate") &&
         expect(flag && flag->kind == instruction_kind::flags, "decode flag control") &&

@@ -30,10 +30,10 @@ LOOP-family branches, and near RET. Unsupported opcodes are returned as errors,
 so control-flow analysis can never continue based on a guessed boundary.
 It also determines boundaries for common arithmetic, data-movement, stack, and
 immediate ModR/M encodings, including 16-bit addressing displacements.
-For `MOV r8/r16, immediate`, it additionally emits typed register and immediate
-operands; the semantics layer consumes those decoded fields rather than
-re-reading instruction bytes. The operand model reserves explicit memory forms
-for later effective-address lowering.
+For `MOV r8/r16, immediate` and register/memory ModR/M MOV forms, it
+additionally emits typed operands; the semantics layer consumes those decoded
+fields rather than re-reading instruction bytes. Memory forms retain their
+validated ModR/M encoding for later effective-address lowering.
 8086 segment, LOCK, and REP prefix combinations are included in instruction
 boundaries and are bounded to the architectural 15-byte instruction maximum.
 Far-pointer loads and 8087 escape encodings are also bounded and labeled, but
