@@ -1,0 +1,28 @@
+/** @file exit_program_compiler.hpp @brief End-to-end recompilation of the verified DOS exit subset. */
+#pragma once
+
+#include "dosrecomp/loader/binary_loader.hpp"
+
+#include <expected>
+#include <string>
+#include <vector>
+
+namespace dosrecomp::compiler {
+
+/** Contextual reason a program cannot be compiled by the current semantic subset. */
+struct compile_error { std::string message; };
+
+/**
+ * Compiles `MOV AX, 4Cxxh; INT 21h` at an image entry point into native ELF.
+ *
+ * This deliberately narrow vertical slice proves loader → decoder → semantics
+ * → backend composition. Other program shapes are rejected until translated.
+ */
+class exit_program_compiler final {
+public:
+    [[nodiscard]] static std::expected<std::vector<std::byte>, compile_error>
+    compile(const loader::program_image& image);
+};
+
+} // namespace dosrecomp::compiler
+
