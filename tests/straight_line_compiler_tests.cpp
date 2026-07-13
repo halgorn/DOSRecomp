@@ -329,5 +329,27 @@ int main() {
         std::cerr << "do-while loop program did not exit 0\n";
         return EXIT_FAILURE;
     }
+    const auto alloc_program = std::vector<std::byte>{
+        b(0xbb), b(0x40), b(0x00),
+        b(0xb4), b(0x48),
+        b(0xcd), b(0x21),
+        b(0xb4), b(0x4c),
+        b(0xcd), b(0x21),
+    };
+    const auto alloc_image = dosrecomp::loader::binary_loader::load_bytes(alloc_program);
+    if (!alloc_image) { std::cerr << "failed to load alloc program\n"; return EXIT_FAILURE; }
+    const auto alloc_elf = dosrecomp::compiler::branching_compiler::compile(*alloc_image);
+    if (!alloc_elf) { std::cerr << "failed to compile alloc program: " << alloc_elf.error().message << "\n"; return EXIT_FAILURE; }
+    const auto al_path = std::filesystem::temp_directory_path() / ("dosrecomp-al-" + std::to_string(getpid()));
+    { std::ofstream output(al_path, std::ios::binary); output.write(reinterpret_cast<const char*>(alloc_elf->data()), static_cast<std::streamsize>(alloc_elf->size())); }
+    std::filesystem::permissions(al_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    const auto al_pid = fork();
+    if (al_pid == 0) { execl(al_path.string().c_str(), al_path.string().c_str(), static_cast<char*>(nullptr)); _exit(127); }
+    int al_status = 0; waitpid(al_pid, &al_status, 0);
+    std::filesystem::remove(al_path);
+    if (!WIFEXITED(al_status) || WEXITSTATUS(al_status) != 0) {
+        std::cerr << "alloc program did not exit 0\n";
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }

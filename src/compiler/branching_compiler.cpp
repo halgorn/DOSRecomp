@@ -67,18 +67,18 @@ constexpr std::size_t word_reg_index(decoder::register_name r) {
 }
 
 void emit_runtime_header(std::ostream& out) {
-    out << "#include <cstdint>\n#include <cstdio>\n#include <cstdlib>\n#include <ctime>\n"
-        << "#include <fcntl.h>\n#include <sys/syscall.h>\n#include <unistd.h>\n\n"
-        << "static uint16_t regs[20] = {0}; static uint8_t mem[" << std::hex << dos_memory_size << std::dec << "] = {0};\n"
-        << "static uint32_t flags = 0; static int next_fake_handle = 3;\n"
-        << "static int handle_to_fd[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};\n"
-        << "static uint16_t call_stack[256] = {0}; static int call_sp = 0;\n\n"
-        << "static inline void update_flags_cmp(uint16_t a, uint16_t b, bool is_byte) {\n"
-        << "    if (is_byte) { uint8_t aa = static_cast<uint8_t>(a), bb = static_cast<uint8_t>(b), r = static_cast<uint8_t>(aa - bb);\n"
-        << "      flags = (aa == bb ? 0x40u : 0u) | ((r & 0x80) ? 0x80u : 0u) | (aa < bb ? 1u : 0u); }\n"
-        << "    else { uint16_t r = static_cast<uint16_t>(a - b);\n"
-        << "      flags = (a == b ? 0x40u : 0u) | ((r & 0x8000) ? 0x8000u : 0u) | (a < b ? 1u : 0u); }\n}\n"
-        << "static void dispatch(uint32_t target);\n";
+    out << "#include <cstdint>\n#include <cstdio>\n#include <cstdlib>\n#include <ctime>\n#include <fcntl.h>\n"
+        "#include <sys/syscall.h>\n#include <unistd.h>\n\n"
+        "static uint16_t regs[20] = {0}; static uint8_t mem[" << std::hex << dos_memory_size << std::dec << "] = {0};\n"
+        "static uint32_t flags = 0; static int next_fake_handle = 3;\n"
+        "static int handle_to_fd[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};\n"
+        "static uint16_t call_stack[256] = {0}; static int call_sp = 0;\n\n"
+        "static inline void update_flags_cmp(uint16_t a, uint16_t b, bool is_byte) {\n"
+        "    if (is_byte) { uint8_t aa = static_cast<uint8_t>(a), bb = static_cast<uint8_t>(b), r = static_cast<uint8_t>(aa - bb);\n"
+        "      flags = (aa == bb ? 0x40u : 0u) | ((r & 0x80) ? 0x80u : 0u) | (aa < bb ? 1u : 0u); }\n"
+        "    else { uint16_t r = static_cast<uint16_t>(a - b);\n"
+        "      flags = (a == b ? 0x40u : 0u) | ((r & 0x8000) ? 0x8000u : 0u) | (a < b ? 1u : 0u); }\n}\n"
+        "static void dispatch(uint32_t target);\n";
 }
 
 void emit_int21_runtime(std::ostream& out) {
@@ -126,6 +126,11 @@ void emit_int21_runtime(std::ostream& out) {
     out << "      if (getcwd(tmp, sizeof(tmp) - 1) != nullptr) { uint32_t k = 0;\n";
     out << "        while (tmp[k] && k < 259) { mem[regs[2] + k] = static_cast<uint8_t>(tmp[k]); ++k; } regs[0] = 0; }\n";
     out << "      else regs[0] = 0x0005; break; }\n";
+    out << "    case 0x48: { static uint16_t next_seg = 0x2000; uint16_t want = regs[3];\n";
+    out << "      if (want == 0) { regs[0] = 0x0007; regs[3] = 0xffff; break; }\n";
+    out << "      regs[0] = next_seg; regs[2] = 0; regs[3] = want; next_seg = static_cast<uint16_t>(next_seg + want); break; }\n";
+    out << "    case 0x49: regs[0] = 0; regs[3] = 0; break;\n";
+    out << "    case 0x4a: regs[0] = 0; break;\n";
     out << "    default: syscall(SYS_exit, 1); return;\n    }\n  }\n";
 }
 
@@ -382,8 +387,7 @@ collect_block_starts(const loader::program_image& image) {
                 const bool falls_through = kind == decoder::instruction_kind::conditional_jump
                     || kind == decoder::instruction_kind::call
                     || (kind == decoder::instruction_kind::interrupt && !is_last_int21);
-                if (falls_through && next < image.bytes.size()) {
-                    if (starts.insert(next).second) changed = true;
+                if (falls_through && next < image.bytes.size()) { if (starts.insert(next).second) changed = true;
                 }
                 if (kind == decoder::instruction_kind::jump || kind == decoder::instruction_kind::conditional_jump ||
                     kind == decoder::instruction_kind::return_ || kind == decoder::instruction_kind::interrupt ||
@@ -405,13 +409,10 @@ collect_block_starts(const loader::program_image& image) {
 void emit_image_array(std::ostream& out, const std::vector<std::byte>& bytes) {
     out << "  static const uint8_t img[] = {";
     for (std::size_t i = 0; i < bytes.size(); ++i) { if (i % 16 == 0) out << "\n    ";
-        out << "0x" << std::hex << std::setw(2) << std::setfill('0')
-            << static_cast<unsigned>(std::to_integer<std::uint8_t>(bytes[i])) << std::dec << ",";
-    }
+        out << "0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(std::to_integer<std::uint8_t>(bytes[i])) << std::dec << ","; }
     out << "\n  };\n";
 }
-[[nodiscard]] std::expected<void, branching_compile_error>
-write_main(std::ostream& out, const loader::program_image& image) {
+[[nodiscard]] std::expected<void, branching_compile_error> write_main(std::ostream& out, const loader::program_image& image) {
     out << "int main() {\n  regs[4] = 0xfffe;\n";
     if (image.format == loader::executable_format::mz) {
         const auto base = static_cast<std::uint32_t>(image.entry_point.segment) * 16U;
@@ -490,7 +491,6 @@ branching_compiler::compile(const loader::program_image& image) {
     if (!binary.read(reinterpret_cast<char*>(data.data()), size)) return std::unexpected(branching_compile_error{"cannot read compiled ELF"});
     return data;
 }
-
 std::expected<std::string, branching_compile_error>
 branching_compiler::emit_llvm(const loader::program_image& image) {
     const auto result = straight_line_compiler::emit_llvm(image);
