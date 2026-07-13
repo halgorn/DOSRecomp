@@ -30,6 +30,8 @@ LOOP-family branches, and near RET. Unsupported opcodes are returned as errors,
 so control-flow analysis can never continue based on a guessed boundary.
 It also determines boundaries for common arithmetic, data-movement, stack, and
 immediate ModR/M encodings, including 16-bit addressing displacements.
+Single 8086 segment, LOCK, and REP prefixes are included in instruction
+boundaries; unsupported prefix combinations are rejected explicitly.
 
 ## CFG
 

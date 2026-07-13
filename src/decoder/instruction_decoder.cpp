@@ -39,6 +39,11 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
     return (opcode <= 0x3b && (opcode & 0x04U) != 0x04U) || opcode == 0x84 || opcode == 0x85 ||
            opcode == 0x86 || opcode == 0x87;
 }
+
+[[nodiscard]] bool is_prefix(std::uint8_t opcode) {
+    return opcode == 0x26 || opcode == 0x2e || opcode == 0x36 || opcode == 0x3e ||
+           opcode == 0xf0 || opcode == 0xf2 || opcode == 0xf3;
+}
 } // namespace
 
 std::expected<instruction, decode_error>
@@ -47,6 +52,18 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         return std::unexpected(decode_error{"instruction offset is outside the code image"});
     }
     const auto opcode = byte_at(code, offset);
+    if (is_prefix(opcode)) {
+        if (code.size() - offset < 2) return truncated(offset);
+        if (is_prefix(byte_at(code, offset + 1))) {
+            return std::unexpected(decode_error{"multiple 8086 instruction prefixes are not supported"});
+        }
+        const auto decoded = decode_at(code, offset + 1);
+        if (!decoded) return std::unexpected(decoded.error());
+        auto prefixed = *decoded;
+        prefixed.offset = offset;
+        ++prefixed.size;
+        return prefixed;
+    }
     const auto relative8 = [&]() -> std::expected<instruction, decode_error> {
         if (code.size() - offset < 2) return truncated(offset);
         return instruction{instruction_kind::jump, offset, 2,
