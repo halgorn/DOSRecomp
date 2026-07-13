@@ -1,4 +1,5 @@
 #include "dosrecomp/runtime/real_mode_memory.hpp"
+#include <algorithm>
 namespace dosrecomp::runtime {
 real_mode_memory::real_mode_memory() : bytes_(size) {}
 std::expected<std::uint8_t, memory_error> real_mode_memory::read8(std::uint32_t address) const {
@@ -17,6 +18,11 @@ std::expected<std::uint16_t, memory_error> real_mode_memory::read16(std::uint32_
 std::expected<void, memory_error> real_mode_memory::write16(std::uint32_t address, std::uint16_t value) {
     if (address >= bytes_.size() || bytes_.size() - address < 2) return std::unexpected(memory_error{"word crosses real-mode memory boundary"});
     bytes_[address] = static_cast<std::byte>(value); bytes_[address + 1] = static_cast<std::byte>(value >> 8U); return {};
+}
+std::expected<void, memory_error> real_mode_memory::write(std::uint32_t address, std::span<const std::byte> data) {
+    if (address > bytes_.size() || data.size() > bytes_.size() - address) return std::unexpected(memory_error{"memory range is outside real-mode memory"});
+    std::copy(data.begin(), data.end(), bytes_.begin() + static_cast<std::ptrdiff_t>(address));
+    return {};
 }
 std::expected<std::uint8_t, memory_error> real_mode_memory::read8(std::uint16_t segment, std::uint16_t offset) const {
     return read8(physical_address(segment, offset));
