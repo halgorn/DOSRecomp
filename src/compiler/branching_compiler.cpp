@@ -358,6 +358,11 @@ position = next;
 collect_block_starts(const loader::program_image& image) {
     std::set<std::size_t> starts;
     starts.insert(image.entry_offset());
+    std::size_t last_interrupt = 0;
+    for (std::size_t p = 0; p + 1 < image.bytes.size(); ++p) {
+        if (std::to_integer<std::uint8_t>(image.bytes[p]) == 0xcd
+            && std::to_integer<std::uint8_t>(image.bytes[p + 1]) == 0x21) last_interrupt = p;
+    }
     bool changed = true;
     while (changed) {
         changed = false;
@@ -369,15 +374,14 @@ collect_block_starts(const loader::program_image& image) {
                 if (!decoded) return std::unexpected(branching_compile_error{std::string{"cannot decode at "} + std::to_string(position) + ": " + decoded.error().message});
                 const auto next = position + decoded->size;
                 const auto kind = decoded->kind;
-                if (kind == decoder::instruction_kind::jump || kind == decoder::instruction_kind::conditional_jump) {
+                if (kind == decoder::instruction_kind::jump || kind == decoder::instruction_kind::conditional_jump || kind == decoder::instruction_kind::call) {
                     const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
                     if (starts.insert(target).second) changed = true;
                 }
+                const bool is_last_int21 = kind == decoder::instruction_kind::interrupt && position == last_interrupt;
                 const bool falls_through = kind == decoder::instruction_kind::conditional_jump
                     || kind == decoder::instruction_kind::call
-                    || (kind == decoder::instruction_kind::interrupt && next + 1 < image.bytes.size()
-                        && std::to_integer<std::uint8_t>(image.bytes[next]) >= 0x40
-                        && std::to_integer<std::uint8_t>(image.bytes[next]) <= 0xbf);
+                    || (kind == decoder::instruction_kind::interrupt && !is_last_int21);
                 if (falls_through && next < image.bytes.size()) {
                     if (starts.insert(next).second) changed = true;
                 }
@@ -392,12 +396,8 @@ collect_block_starts(const loader::program_image& image) {
         const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, pos);
         if (!decoded) break;
         starts.insert(pos);
-        if (decoded->kind == decoder::instruction_kind::interrupt) {
-            const auto after = pos + decoded->size;
-            starts.insert(after);
-            break;
-        }
         pos += decoded->size;
+        if (decoded->kind == decoder::instruction_kind::interrupt) break;
     }
     return starts;
 }

@@ -264,7 +264,19 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
                  operand{operand_kind::immediate, width, register_name::al, immediate, 0}}, 2};
             return result;
         }
-        return instruction{instruction_kind::arithmetic, offset, *size, 0, 0};
+        const auto modrm = byte_at(code, offset + 1);
+        const alu_operation alu = alu_for_extension(static_cast<std::uint8_t>((modrm >> 3U) & 0x07U));
+        const auto width = (opcode == 0x81 || opcode == 0x83) ? operand_width::word : operand_width::byte;
+        const auto disp_size = modrm_displacement_size(modrm);
+        const auto imm_offset = offset + 2 + disp_size;
+        std::uint16_t immediate = static_cast<std::uint16_t>(byte_at(code, imm_offset));
+        if (opcode == 0x83) immediate = static_cast<std::uint16_t>(static_cast<std::int16_t>(static_cast<std::int8_t>(byte_at(code, imm_offset))));
+        else if (opcode == 0x81) immediate = static_cast<std::uint16_t>(byte_at(code, imm_offset) | (byte_at(code, imm_offset + 1) << 8U));
+        const auto kind = alu == alu_operation::compare ? instruction_kind::compare : instruction_kind::arithmetic;
+        return instruction{kind, offset, *size, 0, 0,
+            {rm_operand(code, offset + 1, width, modrm),
+             operand{operand_kind::immediate, width, register_name::al, immediate, 0}}, 2,
+            branch_condition::always, alu};
     }
     if (opcode == 0xff) {
         const auto size = modrm_size(code, offset + 1, 0);
