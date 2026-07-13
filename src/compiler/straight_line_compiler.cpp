@@ -79,7 +79,7 @@ translate_block(const loader::program_image& image, const cfg::control_flow_grap
         const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, position);
         if (!decoded) return std::unexpected(straight_line_compile_error{"cannot decode instruction at offset " + std::to_string(position) + ": " + decoded.error().message});
         if (decoded->kind == decoder::instruction_kind::interrupt) {
-            if (decoded->interrupt_number != 0x21) {
+            if (decoded->interrupt_number != 0x21 && decoded->interrupt_number != 0x10U) {
                 return std::unexpected(straight_line_compile_error{"unsupported interrupt " + std::to_string(decoded->interrupt_number) + "h"});
             }
             const auto ah_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::ah)];
@@ -92,6 +92,21 @@ translate_block(const loader::program_image& image, const cfg::control_flow_grap
                 const auto al_constant = resolve_exit_code(ts.ssa, ts.state, al_ssa);
                 if (al_constant != 0 || al_ssa == ax_ssa) return static_cast<std::uint8_t>(al_constant);
                 return static_cast<std::uint8_t>(ax_constant & 0xffU);
+            }
+            if (decoded->interrupt_number == 0x10U) {
+                if (ah_value == 0x0eU) {
+                    const auto al_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::al)];
+                    const auto al_constant = resolve_exit_code(ts.ssa, ts.state, al_ssa);
+                    ts.write_payloads.push_back({{static_cast<std::byte>(al_constant & 0xffU)}});
+                    ts.writes.push_back(backend::write_call{std::span<const std::byte>{ts.write_payloads.back().data(), 1}, 1});
+                    position += decoded->size;
+                    continue;
+                }
+                if (ah_value == 0x02U) {
+                    position += decoded->size;
+                    continue;
+                }
+                return std::unexpected(straight_line_compile_error{"unsupported INT 10h function AH=" + std::to_string(static_cast<unsigned>(ah_value))});
             }
             if (ah_value == 0x09U) {
                 const auto dx_ssa = ts.state.values[static_cast<std::size_t>(ir::register_id::dx)];

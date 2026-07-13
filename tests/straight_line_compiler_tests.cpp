@@ -81,6 +81,24 @@ int main() {
         std::cerr << "INT 21h AH=02h did not write to stderr as expected\n";
         return EXIT_FAILURE;
     }
+    const auto video_program = dosrecomp::loader::binary_loader::load_bytes({b(0xb0), b('H'), b(0xb4), b(0x0e), b(0xcd), b(0x10), b(0xb4), b(0x4c), b(0xb0), b(7), b(0xcd), b(0x21)});
+    const auto video_elf = video_program ? dosrecomp::compiler::straight_line_compiler::compile(*video_program) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"video load failed"})};
+    if (!video_elf) {
+        std::cerr << "failed to compile INT 10h AH=0Eh program\n";
+        return EXIT_FAILURE;
+    }
+    const auto video_path = std::filesystem::temp_directory_path() / ("dosrecomp-video-" + std::to_string(getpid()));
+    {
+        std::ofstream output(video_path, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(video_elf->data()), static_cast<std::streamsize>(video_elf->size()));
+    }
+    std::filesystem::permissions(video_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    const auto video_status = std::system(video_path.string().c_str());
+    std::filesystem::remove(video_path);
+    if (video_status == -1 || !WIFEXITED(video_status) || WEXITSTATUS(video_status) != 7) {
+        std::cerr << "INT 10h AH=0Eh program did not exit 7\n";
+        return EXIT_FAILURE;
+    }
     const auto non_exit = dosrecomp::loader::binary_loader::load_bytes({b(0x90)});
     const auto non_exit_elf = non_exit ? dosrecomp::compiler::straight_line_compiler::compile(*non_exit) : std::expected<std::vector<std::byte>, dosrecomp::compiler::straight_line_compile_error>{std::unexpected(dosrecomp::compiler::straight_line_compile_error{"non-exit load failed"})};
     if (non_exit_elf) {
