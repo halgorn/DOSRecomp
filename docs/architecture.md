@@ -97,7 +97,9 @@ only on CFG and rejects dangling or ambiguous successor relationships.
 
 `register_ssa_builder` models the nine 8086 architectural registers as
 immutable versions. It introduces entry values, definitions, and phi values at
-control-flow joins. Instruction semantics will use this builder to translate
+control-flow joins. It also records explicit add/subtract/bitwise operation
+definitions, so instruction semantics can preserve arithmetic meaning rather
+than treating every write as an opaque version. Instruction semantics will use this builder to translate
 register reads and writes without mutating historical values.
 
 ## Semantics

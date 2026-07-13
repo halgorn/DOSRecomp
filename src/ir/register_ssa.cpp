@@ -10,7 +10,7 @@ constexpr std::size_t index_of(register_id reg) { return static_cast<std::size_t
 register_ssa_builder::register_ssa_builder() {
     values_.reserve(index_of(register_id::count));
     for (std::size_t index = 0; index < index_of(register_id::count); ++index) {
-        values_.push_back({.id = index, .reg = static_cast<register_id>(index), .kind = value_kind::entry, .inputs = {}, .constant = std::nullopt});
+        values_.push_back({.id = index, .reg = static_cast<register_id>(index), .kind = value_kind::entry, .inputs = {}, .constant = std::nullopt, .operation = std::nullopt});
     }
 }
 
@@ -22,14 +22,22 @@ register_state register_ssa_builder::entry_state() const noexcept {
 
 std::size_t register_ssa_builder::define(register_state& state, register_id reg, std::vector<std::size_t> inputs) {
     const auto id = values_.size();
-    values_.push_back({.id = id, .reg = reg, .kind = value_kind::definition, .inputs = std::move(inputs), .constant = std::nullopt});
+    values_.push_back({.id = id, .reg = reg, .kind = value_kind::definition, .inputs = std::move(inputs), .constant = std::nullopt, .operation = std::nullopt});
     state.values[index_of(reg)] = id;
     return id;
 }
 
 std::size_t register_ssa_builder::define_constant(register_state& state, register_id reg, std::uint16_t value) {
     const auto id = values_.size();
-    values_.push_back({.id = id, .reg = reg, .kind = value_kind::definition, .inputs = {}, .constant = value});
+    values_.push_back({.id = id, .reg = reg, .kind = value_kind::definition, .inputs = {}, .constant = value, .operation = std::nullopt});
+    state.values[index_of(reg)] = id;
+    return id;
+}
+
+std::size_t register_ssa_builder::define_operation(register_state& state, register_id reg, operation_kind operation,
+                                                    std::vector<std::size_t> inputs) {
+    const auto id = values_.size();
+    values_.push_back({.id = id, .reg = reg, .kind = value_kind::operation, .inputs = std::move(inputs), .constant = std::nullopt, .operation = operation});
     state.values[index_of(reg)] = id;
     return id;
 }
@@ -40,7 +48,7 @@ register_state register_ssa_builder::merge(const register_state& first, const re
         if (first.values[index] == second.values[index]) continue;
         const auto id = values_.size();
         values_.push_back({.id = id, .reg = static_cast<register_id>(index), .kind = value_kind::phi,
-            .inputs = {first.values[index], second.values[index]}, .constant = std::nullopt});
+            .inputs = {first.values[index], second.values[index]}, .constant = std::nullopt, .operation = std::nullopt});
         merged.values[index] = id;
     }
     return merged;

@@ -13,7 +13,10 @@ namespace dosrecomp::ir {
 enum class register_id : std::uint8_t { ax, bx, cx, dx, si, di, bp, sp, flags, count };
 
 /** How an SSA value was introduced. */
-enum class value_kind : std::uint8_t { entry, definition, phi };
+enum class value_kind : std::uint8_t { entry, definition, operation, phi };
+
+/** Arithmetic meaning of an SSA operation definition. */
+enum class operation_kind : std::uint8_t { add, subtract, bit_and, bit_or, bit_xor };
 
 /** Immutable SSA definition and its incoming value IDs. */
 struct ssa_value {
@@ -22,6 +25,7 @@ struct ssa_value {
     value_kind kind{};
     std::vector<std::size_t> inputs;
     std::optional<std::uint16_t> constant;
+    std::optional<operation_kind> operation;
 };
 
 /** A register-to-current-SSA-value mapping at one program point. */
@@ -42,6 +46,8 @@ public:
     [[nodiscard]] register_state entry_state() const noexcept;
     [[nodiscard]] std::size_t define(register_state& state, register_id reg, std::vector<std::size_t> inputs = {});
     [[nodiscard]] std::size_t define_constant(register_state& state, register_id reg, std::uint16_t value);
+    [[nodiscard]] std::size_t define_operation(register_state& state, register_id reg, operation_kind operation,
+                                               std::vector<std::size_t> inputs);
     [[nodiscard]] register_state merge(const register_state& first, const register_state& second);
     [[nodiscard]] const std::vector<ssa_value>& values() const noexcept;
 
