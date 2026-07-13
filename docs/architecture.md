@@ -136,7 +136,9 @@ deterministic and testable.
 
 `virtual_drive` maps one absolute DOS drive into an explicit host root. It is a
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
-rejected before a filesystem operation is attempted.
+rejected before a filesystem operation is attempted. Canonical containment is
+also checked, so a symlink beneath the root cannot redirect a guest path
+outside the drive.
 
 `virtual_file_system` layers DOS-style read/write handles over that drive for
 bounded reads, writes, and close operations. It starts handles at five,

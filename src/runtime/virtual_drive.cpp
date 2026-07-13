@@ -29,8 +29,19 @@ std::expected<std::filesystem::path, path_error> virtual_drive::resolve(std::str
             component.clear();
         }
     }
-    return result;
+    std::error_code error;
+    const auto canonical_root = std::filesystem::weakly_canonical(root_, error);
+    if (error) return std::unexpected(path_error{"configured DOS drive root cannot be resolved"});
+    const auto canonical_result = std::filesystem::weakly_canonical(result, error);
+    if (error) return std::unexpected(path_error{"DOS path cannot be resolved safely"});
+    const auto relative = canonical_result.lexically_relative(canonical_root);
+    if (relative.empty() && canonical_result != canonical_root) {
+        return std::unexpected(path_error{"DOS path escapes the virtual drive"});
+    }
+    for (const auto& component_path : relative) {
+        if (component_path == "..") return std::unexpected(path_error{"DOS path escapes the virtual drive"});
+    }
+    return canonical_result;
 }
 
 } // namespace dosrecomp::runtime
-
