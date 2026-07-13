@@ -32,49 +32,33 @@ constexpr std::size_t word_reg_index(decoder::register_name r) {
 }
 
 [[nodiscard]] std::string word_reg_access(decoder::register_name r) {
-    std::ostringstream out;
-    out << "regs[" << word_reg_index(r) << "]";
-    return out.str();
+    return "regs[" + std::to_string(word_reg_index(r)) + "]";
+}
+
+[[nodiscard]] std::pair<int, decoder::register_name> byte_reg_locus(decoder::register_name r) {
+    switch (r) {
+    case decoder::register_name::al: return {0, decoder::register_name::ax};
+    case decoder::register_name::ah: return {8, decoder::register_name::ax};
+    case decoder::register_name::cl: return {0, decoder::register_name::cx};
+    case decoder::register_name::ch: return {8, decoder::register_name::cx};
+    case decoder::register_name::dl: return {0, decoder::register_name::dx};
+    case decoder::register_name::dh: return {8, decoder::register_name::dx};
+    case decoder::register_name::bl: return {0, decoder::register_name::bx};
+    case decoder::register_name::bh: return {8, decoder::register_name::bx};
+    default: return {0, r};
+    }
 }
 
 [[nodiscard]] std::string byte_reg_access(decoder::register_name r) {
-    int shift = 0;
-    decoder::register_name word_reg = decoder::register_name::ax;
-    switch (r) {
-    case decoder::register_name::al: shift = 0; word_reg = decoder::register_name::ax; break;
-    case decoder::register_name::ah: shift = 8; word_reg = decoder::register_name::ax; break;
-    case decoder::register_name::cl: shift = 0; word_reg = decoder::register_name::cx; break;
-    case decoder::register_name::ch: shift = 8; word_reg = decoder::register_name::cx; break;
-    case decoder::register_name::dl: shift = 0; word_reg = decoder::register_name::dx; break;
-    case decoder::register_name::dh: shift = 8; word_reg = decoder::register_name::dx; break;
-    case decoder::register_name::bl: shift = 0; word_reg = decoder::register_name::bx; break;
-    case decoder::register_name::bh: shift = 8; word_reg = decoder::register_name::bx; break;
-    default: shift = 0; word_reg = r; break;
-    }
-    std::ostringstream out;
-    out << "static_cast<uint8_t>(regs[" << word_reg_index(word_reg) << "] >> " << shift << ")";
-    return out.str();
+    const auto [shift, word_reg] = byte_reg_locus(r);
+    return "static_cast<uint8_t>(regs[" + std::to_string(word_reg_index(word_reg)) + "] >> " + std::to_string(shift) + ")";
 }
 
 [[nodiscard]] std::string byte_reg_store(decoder::register_name r, const std::string& value_expr) {
-    int shift = 0;
-    decoder::register_name word_reg = decoder::register_name::ax;
-    switch (r) {
-    case decoder::register_name::al: shift = 0; word_reg = decoder::register_name::ax; break;
-    case decoder::register_name::ah: shift = 8; word_reg = decoder::register_name::ax; break;
-    case decoder::register_name::cl: shift = 0; word_reg = decoder::register_name::cx; break;
-    case decoder::register_name::ch: shift = 8; word_reg = decoder::register_name::cx; break;
-    case decoder::register_name::dl: shift = 0; word_reg = decoder::register_name::dx; break;
-    case decoder::register_name::dh: shift = 8; word_reg = decoder::register_name::dx; break;
-    case decoder::register_name::bl: shift = 0; word_reg = decoder::register_name::bx; break;
-    case decoder::register_name::bh: shift = 8; word_reg = decoder::register_name::bx; break;
-    default: return "/* unsupported byte store */";
-    }
-    std::ostringstream out;
-    out << "regs[" << word_reg_index(word_reg) << "] = static_cast<uint16_t>((regs["
-        << word_reg_index(word_reg) << "] & static_cast<uint16_t>(~((uint16_t)0xffu << " << shift
-        << "))) | (static_cast<uint16_t>(" << value_expr << ") << " << shift << "))";
-    return out.str();
+    const auto [shift, word_reg] = byte_reg_locus(r);
+    const auto idx = std::to_string(word_reg_index(word_reg));
+    return "regs[" + idx + "] = static_cast<uint16_t>((regs[" + idx + "] & static_cast<uint16_t>(~((uint16_t)0xffu << "
+        + std::to_string(shift) + "))) | (static_cast<uint16_t>(" + value_expr + ") << " + std::to_string(shift) + "))";
 }
 
 [[nodiscard]] std::string block_label(std::size_t offset) {
@@ -98,28 +82,14 @@ void emit_runtime_header(std::ostream& out) {
     out << "static int next_fake_handle = 3;\n";
     out << "static int handle_to_fd[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};\n";
     out << "\n";
-    out << "static inline uint16_t load_mem16(uint32_t base, int16_t disp = 0) {\n";
-    out << "    const uint32_t linear = (static_cast<uint32_t>(regs[11]) << 4) + static_cast<uint32_t>(static_cast<int32_t>(base) + static_cast<int32_t>(disp));\n";
-    out << "    return static_cast<uint16_t>(static_cast<uint16_t>(mem[linear]) | (static_cast<uint16_t>(mem[linear + 1]) << 8));\n";
-    out << "}\n";
     out << "static inline void update_flags_cmp(uint16_t a, uint16_t b, bool is_byte) {\n";
-    out << "    uint16_t r;\n";
-    out << "    if (is_byte) {\n";
-    out << "        const uint8_t aa = static_cast<uint8_t>(a);\n";
-    out << "        const uint8_t bb = static_cast<uint8_t>(b);\n";
-    out << "        r = static_cast<uint16_t>(aa - bb);\n";
-    out << "        flags = (aa == bb ? 0x40u : 0u)\n";
-    out << "             | ((r & 0x80) ? 0x80u : 0u)\n";
-    out << "             | (aa < bb ? 1u : 0u);\n";
-    out << "    } else {\n";
-    out << "        r = static_cast<uint16_t>(a - b);\n";
-    out << "        flags = (a == b ? 0x40u : 0u)\n";
-    out << "             | ((r & 0x8000) ? 0x8000u : 0u)\n";
-    out << "             | (a < b ? 1u : 0u);\n";
-    out << "    }\n";
+    out << "    if (is_byte) { uint8_t aa = static_cast<uint8_t>(a), bb = static_cast<uint8_t>(b);\n";
+    out << "      uint8_t r = static_cast<uint8_t>(aa - bb);\n";
+    out << "      flags = (aa == bb ? 0x40u : 0u) | ((r & 0x80) ? 0x80u : 0u) | (aa < bb ? 1u : 0u); }\n";
+    out << "    else { uint16_t r = static_cast<uint16_t>(a - b);\n";
+    out << "      flags = (a == b ? 0x40u : 0u) | ((r & 0x8000) ? 0x8000u : 0u) | (a < b ? 1u : 0u); }\n";
     out << "}\n";
     out << "static void dispatch(uint32_t target);\n";
-    out << "\n";
 }
 
 void emit_int21_runtime(std::ostream& out) {
@@ -246,26 +216,20 @@ void emit_move(std::ostream& out, const decoder::instruction& decoded) {
     const auto is_byte = dst.width == decoder::operand_width::byte;
     if (dst.kind == decoder::operand_kind::memory) {
         const auto addr = emit_mem_addr(dst);
-        if (src.kind == decoder::operand_kind::reg) {
-            const auto value = is_byte ? byte_reg_access(src.reg) : word_reg_access(src.reg);
-            emit_mem_store(out, addr, is_byte, value);
-        } else if (src.kind == decoder::operand_kind::immediate) {
-            std::ostringstream v; v << "0x" << std::hex << src.immediate << std::dec;
-            emit_mem_store(out, addr, is_byte, v.str());
-        } else out << "  // unsupported MOV memory source\n";
+        if (src.kind == decoder::operand_kind::reg) emit_mem_store(out, addr, is_byte, is_byte ? byte_reg_access(src.reg) : word_reg_access(src.reg));
+        else if (src.kind == decoder::operand_kind::immediate) { std::ostringstream v; v << "0x" << std::hex << src.immediate << std::dec; emit_mem_store(out, addr, is_byte, v.str()); }
+        else out << "  // unsupported MOV memory source\n";
         return;
     }
     if (src.kind == decoder::operand_kind::memory) {
         const auto addr = emit_mem_addr(src);
-        if (is_byte) { std::string v = "mem[" + addr + "]"; out << "  " << byte_reg_store(dst.reg, v) << ";\n"; }
+        if (is_byte) out << "  " << byte_reg_store(dst.reg, "mem[" + addr + "]") << ";\n";
         else { std::ostringstream v; v << "(static_cast<uint16_t>(mem[" << addr << "]) | (static_cast<uint16_t>(mem[" << addr << " + 1]) << 8))";
                out << "  regs[" << word_reg_index(dst.reg) << "] = " << v.str() << ";\n"; }
         return;
     }
-    if (src.kind == decoder::operand_kind::reg) {
-        if (is_byte) out << "  " << byte_reg_store(dst.reg, byte_reg_access(src.reg)) << ";\n";
-        else out << "  regs[" << word_reg_index(dst.reg) << "] = regs[" << word_reg_index(src.reg) << "];\n";
-    }
+    if (is_byte) out << "  " << byte_reg_store(dst.reg, byte_reg_access(src.reg)) << ";\n";
+    else out << "  regs[" << word_reg_index(dst.reg) << "] = regs[" << word_reg_index(src.reg) << "];\n";
 }
 
 void emit_arithmetic(std::ostream& out, const decoder::instruction& decoded) {
@@ -338,26 +302,10 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
         }
         if (decoded->kind == decoder::instruction_kind::jump) {
             if (decoded->indirect) {
-                const auto& op = decoded->operands[0];
-                std::string target;
-                if (op.kind == decoder::operand_kind::reg) {
-                    target = word_reg_access(op.reg);
-                } else if (op.kind == decoder::operand_kind::memory) {
-                    target = "load_mem16(" + std::to_string(op.displacement) + ")";
-                    for (std::uint8_t i = 0; i < op.address_register_count; ++i) {
-                        target += " + regs[" + std::to_string(word_reg_index(op.address_registers[i])) + "]";
-                    }
-                } else {
-                    out << "  // unsupported indirect jump operand\n  syscall(SYS_exit, 1); return;\n";
-                    position = next;
-                    break;
-                }
-                out << "  dispatch(" << target << ");\n";
-            } else {
-                out << "  " << block_label(static_cast<std::size_t>(position + decoded->size + decoded->relative_target)) << "();\n";
-            }
-            position = next;
-            break;
+                if (decoded->operands[0].kind == decoder::operand_kind::reg) out << "  dispatch(" << word_reg_access(decoded->operands[0].reg) << ");\n";
+                else { out << "  // unsupported indirect jump\n  syscall(SYS_exit, 1); return;\n"; position = next; break; }
+            } else out << "  " << block_label(static_cast<std::size_t>(position + decoded->size + decoded->relative_target)) << "();\n";
+            position = next; break;
         }
         if (decoded->kind == decoder::instruction_kind::conditional_jump) {
             const auto target = static_cast<std::size_t>(position + decoded->size + decoded->relative_target);
@@ -462,14 +410,11 @@ write_main(std::ostream& out, const loader::program_image& image) {
         out << "  for (size_t i = 0; i < sizeof(img); ++i) mem[" << std::hex << base << " + i] = img[i];\n" << std::dec;
         for (const auto& reloc : image.relocations) {
             const auto offset = static_cast<std::uint32_t>(reloc.address.segment) * 16U + reloc.address.offset + base;
-            out << "  { uint16_t cur = static_cast<uint16_t>(mem[" << std::hex << offset
-                << "]) | (static_cast<uint16_t>(mem[" << offset + 1 << "]) << 8);\n" << std::dec;
-            out << "    cur = static_cast<uint16_t>(cur + " << seg << ");\n";
-            out << "    mem[" << std::hex << offset << "] = static_cast<uint8_t>(cur);\n" << std::dec;
-            out << "    mem[" << std::hex << offset + 1 << "] = static_cast<uint8_t>(cur >> 8); }\n" << std::dec;
+            out << "  { uint16_t cur = static_cast<uint16_t>(mem[" << std::hex << offset << "]) | (static_cast<uint16_t>(mem["
+                << offset + 1 << "]) << 8); cur = static_cast<uint16_t>(cur + " << seg << ");\n" << std::dec
+                << "    mem[" << std::hex << offset << "] = static_cast<uint8_t>(cur); mem[" << offset + 1 << "] = static_cast<uint8_t>(cur >> 8); }\n";
         }
-        out << "  regs[10] = " << image.initial_stack.segment << ";\n";
-        out << "  regs[4] = " << image.initial_stack.offset << ";\n";
+        out << "  regs[10] = " << image.initial_stack.segment << "; regs[4] = " << image.initial_stack.offset << ";\n";
     } else {
         emit_image_array(out, image.bytes);
         out << "  for (size_t i = 0; i < sizeof(img); ++i) mem[0x100 + i] = img[i];\n";
@@ -482,14 +427,10 @@ write_main(std::ostream& out, const loader::program_image& image) {
 
 [[nodiscard]] std::expected<void, branching_compile_error>
 emit_dispatch(std::ostream& out, const std::set<std::size_t>& targets) {
-    out << "static void dispatch(uint32_t target) {\n";
-    out << "    switch (target) {\n";
-    for (const auto t : targets) {
+    out << "static void dispatch(uint32_t target) {\n  switch (target) {\n";
+    for (const auto t : targets)
         out << "    case 0x" << std::hex << t << std::dec << ": " << block_label(t) << "(); return;\n";
-    }
-    out << "    default: syscall(SYS_exit, 1); return;\n";
-    out << "    }\n";
-    out << "}\n\n";
+    out << "    default: syscall(SYS_exit, 1); return;\n  }\n}\n\n";
     return {};
 }
 
@@ -499,9 +440,7 @@ emit_c_runtime(const loader::program_image& image) {
     if (!starts) return std::unexpected(starts.error());
     std::ostringstream out;
     emit_runtime_header(out);
-    for (const auto start : *starts) {
-        out << "static void " << block_label(start) << "();\n";
-    }
+    for (const auto start : *starts) out << "static void " << block_label(start) << "();\n";
     out << "\n";
     for (const auto start : *starts) {
         const auto result = emit_block_at(out, image, start);
