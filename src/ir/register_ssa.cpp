@@ -34,6 +34,12 @@ std::size_t register_ssa_builder::define_constant(register_state& state, registe
     return id;
 }
 
+std::size_t register_ssa_builder::constant(register_id reg, std::uint16_t value) {
+    const auto id = values_.size();
+    values_.push_back({.id = id, .reg = reg, .kind = value_kind::definition, .inputs = {}, .constant = value, .operation = std::nullopt});
+    return id;
+}
+
 std::size_t register_ssa_builder::define_operation(register_state& state, register_id reg, operation_kind operation,
                                                     std::vector<std::size_t> inputs) {
     const auto id = values_.size();

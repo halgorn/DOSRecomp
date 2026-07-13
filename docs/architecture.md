@@ -110,6 +110,9 @@ typed decoder operands, updates register SSA, and preserves the literal
 immediate. It also models `MOV r16, r16` as an SSA definition that depends on
 the source version rather than inventing a constant. Any other encoding produces a contextual error; this prevents
 accidental execution or invented program behavior while coverage grows.
+`ADD`, `SUB`, `AND`, `OR`, and `XOR` accumulator-immediate word forms lower to
+explicit SSA operations with an immutable literal input. Carry-dependent and
+flag-only operations remain rejected until flags have first-class semantics.
 
 ## Runtime
 

@@ -46,6 +46,7 @@ public:
     [[nodiscard]] register_state entry_state() const noexcept;
     [[nodiscard]] std::size_t define(register_state& state, register_id reg, std::vector<std::size_t> inputs = {});
     [[nodiscard]] std::size_t define_constant(register_state& state, register_id reg, std::uint16_t value);
+    [[nodiscard]] std::size_t constant(register_id reg, std::uint16_t value);
     [[nodiscard]] std::size_t define_operation(register_state& state, register_id reg, operation_kind operation,
                                                std::vector<std::size_t> inputs);
     [[nodiscard]] register_state merge(const register_state& first, const register_state& second);

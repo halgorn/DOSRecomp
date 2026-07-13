@@ -16,8 +16,12 @@ int main() {
     const auto register_decoded = dosrecomp::decoder::instruction_decoder::decode_at(register_code, 0);
     const auto register_effect = register_decoded ? dosrecomp::semantics::instruction_translator::translate(register_code, *register_decoded, builder, state)
                                                   : std::expected<dosrecomp::semantics::semantic_effect, dosrecomp::semantics::translation_error>{std::unexpected(dosrecomp::semantics::translation_error{"decode failed"})};
-    if (!effect || effect->destination != dosrecomp::ir::register_id::ax || effect->immediate != 0x1234 || !register_effect || register_effect->immediate ||
-        builder.values().size() != 11) {
+    const std::vector<std::byte> add_code{b(0x05), b(1), b(0)};
+    const auto add_decoded = dosrecomp::decoder::instruction_decoder::decode_at(add_code, 0);
+    const auto add_effect = add_decoded ? dosrecomp::semantics::instruction_translator::translate(add_code, *add_decoded, builder, state)
+                                        : std::expected<dosrecomp::semantics::semantic_effect, dosrecomp::semantics::translation_error>{std::unexpected(dosrecomp::semantics::translation_error{"decode failed"})};
+    if (!effect || effect->destination != dosrecomp::ir::register_id::ax || effect->immediate != 0x1234 || !register_effect || register_effect->immediate || !add_effect ||
+        builder.values()[add_effect->ssa_value].operation != dosrecomp::ir::operation_kind::add || builder.values().size() != 13) {
         std::cerr << "failed to translate MOV AX, imm16\n";
         return EXIT_FAILURE;
     }
