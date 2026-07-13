@@ -111,6 +111,10 @@ can consume this isolated surface in a later backend.
 `INT 10h/AH=00h` selects either BIOS text mode `03h` or Mode 13h `13h` in a
 separate mode state; unsupported video modes are rejected explicitly.
 
+`pc_speaker` models validated PIT-range tone frequency and active state without
+choosing a host audio backend. A future SDL/audio presenter can consume this
+state without changing DOS-visible behavior.
+
 `INT 16h` provides deterministic keyboard read (`AH=00h`) and availability
 probe (`AH=01h`) over a caller-owned queue, keeping platform input policy out
 of translated program semantics.
