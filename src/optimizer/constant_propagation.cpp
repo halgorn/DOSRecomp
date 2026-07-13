@@ -21,6 +21,7 @@ constant_propagation::analyze(const std::vector<ir::ssa_value>& values) {
             case ir::operation_kind::bit_or: result[value.id] = static_cast<std::uint16_t>(*left | *right); break;
             case ir::operation_kind::bit_xor: result[value.id] = static_cast<std::uint16_t>(*left ^ *right); break;
             case ir::operation_kind::compare: break;
+            case ir::operation_kind::test: break;
             }
             continue;
         }

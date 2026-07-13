@@ -12,6 +12,7 @@ namespace {
     case decoder::alu_operation::bit_or: return ir::operation_kind::bit_or;
     case decoder::alu_operation::bit_xor: return ir::operation_kind::bit_xor;
     case decoder::alu_operation::compare: return ir::operation_kind::compare;
+    case decoder::alu_operation::test: return ir::operation_kind::test;
     default: return std::nullopt;
     }
 }
@@ -44,7 +45,8 @@ instruction_translator::translate(const std::vector<std::byte>& code, const deco
         if (!destination || !operation) return std::unexpected(translation_error{"arithmetic instruction semantics are not implemented"});
         const auto input = state.values[static_cast<std::size_t>(*destination)];
         const auto immediate = ssa.constant(*destination, instruction.operands[1].immediate);
-        const auto result_register = *operation == ir::operation_kind::compare ? ir::register_id::flags : *destination;
+        const auto result_register = (*operation == ir::operation_kind::compare || *operation == ir::operation_kind::test)
+            ? ir::register_id::flags : *destination;
         return semantic_effect{result_register, ssa.define_operation(state, result_register, *operation, {input, immediate}), std::nullopt};
     }
     if ((instruction.kind != decoder::instruction_kind::move_immediate && instruction.kind != decoder::instruction_kind::move) || instruction.operand_count != 2 ||

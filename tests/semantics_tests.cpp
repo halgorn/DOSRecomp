@@ -24,9 +24,14 @@ int main() {
     const auto compare_decoded = dosrecomp::decoder::instruction_decoder::decode_at(compare_code, 0);
     const auto compare_effect = compare_decoded ? dosrecomp::semantics::instruction_translator::translate(compare_code, *compare_decoded, builder, state)
                                                 : std::expected<dosrecomp::semantics::semantic_effect, dosrecomp::semantics::translation_error>{std::unexpected(dosrecomp::semantics::translation_error{"decode failed"})};
-    if (!effect || effect->destination != dosrecomp::ir::register_id::ax || effect->immediate != 0x1234 || !register_effect || register_effect->immediate || !add_effect || !compare_effect ||
+    const std::vector<std::byte> test_code{b(0xa9), b(1), b(0)};
+    const auto test_decoded = dosrecomp::decoder::instruction_decoder::decode_at(test_code, 0);
+    const auto test_effect = test_decoded ? dosrecomp::semantics::instruction_translator::translate(test_code, *test_decoded, builder, state)
+                                          : std::expected<dosrecomp::semantics::semantic_effect, dosrecomp::semantics::translation_error>{std::unexpected(dosrecomp::semantics::translation_error{"decode failed"})};
+    if (!effect || effect->destination != dosrecomp::ir::register_id::ax || effect->immediate != 0x1234 || !register_effect || register_effect->immediate || !add_effect || !compare_effect || !test_effect ||
         compare_effect->destination != dosrecomp::ir::register_id::flags || builder.values()[add_effect->ssa_value].operation != dosrecomp::ir::operation_kind::add ||
-        builder.values()[compare_effect->ssa_value].operation != dosrecomp::ir::operation_kind::compare || builder.values().size() != 15) {
+        builder.values()[compare_effect->ssa_value].operation != dosrecomp::ir::operation_kind::compare ||
+        builder.values()[test_effect->ssa_value].operation != dosrecomp::ir::operation_kind::test || builder.values().size() != 17) {
         std::cerr << "failed to translate MOV AX, imm16\n";
         return EXIT_FAILURE;
     }

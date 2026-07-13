@@ -16,7 +16,7 @@ enum class register_id : std::uint8_t { ax, bx, cx, dx, si, di, bp, sp, flags, c
 enum class value_kind : std::uint8_t { entry, definition, operation, phi };
 
 /** Arithmetic meaning of an SSA operation definition. */
-enum class operation_kind : std::uint8_t { add, subtract, bit_and, bit_or, bit_xor, compare };
+enum class operation_kind : std::uint8_t { add, subtract, bit_and, bit_or, bit_xor, compare, test };
 
 /** Immutable SSA definition and its incoming value IDs. */
 struct ssa_value {
