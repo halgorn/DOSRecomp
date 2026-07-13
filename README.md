@@ -97,6 +97,8 @@ Emit the currently supported direct-control-flow graph as GraphViz DOT:
 ./build/dosrecomp program.exe --emit-cfg > program.dot
 ```
 
+`--emit-dot` is an equivalent explicit GraphViz spelling.
+
 Inspect the target-independent control-flow IR:
 
 ```bash

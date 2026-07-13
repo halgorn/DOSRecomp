@@ -10,7 +10,7 @@
 
 namespace {
 void print_usage() {
-    std::cerr << "Usage: dosrecomp <input.com|input.exe> [-o output|--verbose|--emit-cfg|--emit-ir|--emit-cpp]\n";
+    std::cerr << "Usage: dosrecomp <input.com|input.exe> [-o output|--verbose|--emit-cfg|--emit-dot|--emit-ir|--emit-cpp]\n";
 }
 }
 
@@ -22,10 +22,11 @@ int main(int argc, char* argv[]) {
     const auto option = argc == 3 ? std::string_view(argv[2]) : std::string_view{};
     const bool verbose = option == "--verbose";
     const bool emit_cfg = option == "--emit-cfg";
+    const bool emit_dot = option == "--emit-dot";
     const bool emit_ir = option == "--emit-ir";
     const bool emit_cpp = option == "--emit-cpp";
     const bool explicit_output = argc == 4 && std::string_view(argv[2]) == "-o";
-    if ((argc == 3 && !verbose && !emit_cfg && !emit_ir && !emit_cpp) || (argc == 4 && !explicit_output)) {
+    if ((argc == 3 && !verbose && !emit_cfg && !emit_dot && !emit_ir && !emit_cpp) || (argc == 4 && !explicit_output)) {
         print_usage();
         return 2;
     }
@@ -49,7 +50,7 @@ int main(int argc, char* argv[]) {
         std::cout << "#include <cstdlib>\n\nint main() { return " << static_cast<unsigned>(*exit_code) << "; }\n";
         return 0;
     }
-    if (emit_cfg || emit_ir) {
+    if (emit_cfg || emit_dot || emit_ir) {
         const auto graph = dosrecomp::cfg::cfg_builder::build(result->bytes, result->entry_offset());
         if (!graph) {
             std::cerr << "dosrecomp: cannot build CFG: " << graph.error().message << '\n';
