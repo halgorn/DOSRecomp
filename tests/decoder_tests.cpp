@@ -22,6 +22,7 @@ int main() {
     const auto unknown = instruction_decoder::decode_at({b(0xff)}, 0);
     const auto modrm = instruction_decoder::decode_at({b(0x89), b(0x86), b(0x34), b(0x12)}, 0);
     const auto register_modrm = instruction_decoder::decode_at({b(0x8b), b(0xd8)}, 0);
+    const auto direct_modrm = instruction_decoder::decode_at({b(0x8b), b(0x06), b(0xff), b(0xff)}, 0);
     const auto arithmetic = instruction_decoder::decode_at({b(0x83), b(0x6e), b(0xfe), b(0x01)}, 0);
     const auto accumulator = instruction_decoder::decode_at({b(0x3d), b(0x00), b(0x00)}, 0);
     const auto flag = instruction_decoder::decode_at({b(0xfd)}, 0);
@@ -55,6 +56,8 @@ int main() {
     return (passed && expect(modrm && modrm->kind == instruction_kind::move && modrm->size == 4, "decode ModR/M displacement") &&
         expect(modrm && modrm->operand_count == 2 && modrm->operands[0].kind == operand_kind::memory && modrm->operands[0].address_registers[0] == register_name::bp && modrm->operands[0].displacement == 0x1234 && !modrm->operands[0].direct_address && modrm->operands[1].reg == register_name::ax, "decode memory MOV operands") &&
         expect(register_modrm && register_modrm->operands[0].reg == register_name::bx && register_modrm->operands[1].reg == register_name::ax, "decode register ModR/M MOV operands") &&
+        expect(direct_modrm && direct_modrm->operands[1].direct_address && direct_modrm->operands[1].address_register_count == 0 &&
+            static_cast<std::uint16_t>(direct_modrm->operands[1].displacement) == 0xffff, "decode direct memory offset") &&
         expect(arithmetic && arithmetic->kind == instruction_kind::arithmetic && arithmetic->size == 4, "decode arithmetic immediate") &&
         expect(accumulator && accumulator->kind == instruction_kind::compare && accumulator->size == 3 && accumulator->operand_count == 2 &&
             accumulator->operands[0].reg == register_name::ax && accumulator->operands[1].immediate == 0 && accumulator->alu == alu_operation::compare, "decode accumulator immediate") &&
