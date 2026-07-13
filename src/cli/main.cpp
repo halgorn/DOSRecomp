@@ -1,5 +1,6 @@
 #include "dosrecomp/loader/binary_loader.hpp"
 #include "dosrecomp/cfg/cfg_builder.hpp"
+#include "dosrecomp/compiler/cpp_backend.hpp"
 #include "dosrecomp/compiler/straight_line_compiler.hpp"
 #include "dosrecomp/ir/control_flow_ir.hpp"
 
@@ -43,12 +44,12 @@ int main(int argc, char* argv[]) {
                   << "\nrelocations: " << image.relocations.size() << '\n';
     }
     if (emit_cpp) {
-        const auto exit_code = dosrecomp::compiler::straight_line_compiler::extract_exit_code(*result);
-        if (!exit_code) {
-            std::cerr << "dosrecomp: cannot emit C++: " << exit_code.error().message << '\n';
+        const auto cpp = dosrecomp::compiler::cpp_backend::emit(*result);
+        if (!cpp) {
+            std::cerr << "dosrecomp: cannot emit C++: " << cpp.error().message << '\n';
             return 1;
         }
-        std::cout << "#include <cstdlib>\n\nint main() { return " << static_cast<unsigned>(*exit_code) << "; }\n";
+        std::cout << *cpp;
         return 0;
     }
     if (emit_llvm) {
