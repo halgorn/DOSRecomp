@@ -194,7 +194,8 @@ interrupt boundary independent of guest-memory representation.
 Constant propagation consumes immutable SSA values and computes facts without
 rewriting them. Direct constant definitions are preserved and phi values fold
 only when every incoming value is the same known 16-bit constant; malformed or
-forward SSA references are rejected.
+forward SSA references are rejected. It also folds known 16-bit add, subtract,
+and bitwise SSA operations with defined modular arithmetic.
 
 Dead-value analysis starts at explicit observable roots and marks their SSA
 dependencies live. It validates dense IDs and input bounds, producing a
