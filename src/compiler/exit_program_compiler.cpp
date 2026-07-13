@@ -7,6 +7,17 @@
 
 namespace dosrecomp::compiler {
 namespace {
+[[nodiscard]] std::expected<std::size_t, compile_error>
+skip_nops(const std::vector<std::byte>& code, std::size_t offset) {
+    while (offset < code.size()) {
+        const auto instruction = decoder::instruction_decoder::decode_at(code, offset);
+        if (!instruction) return std::unexpected(compile_error{"cannot decode entry instruction: " + instruction.error().message});
+        if (instruction->kind != decoder::instruction_kind::nop) return offset;
+        offset += instruction->size;
+    }
+    return std::unexpected(compile_error{"entry sequence contains only NOP instructions"});
+}
+
 [[nodiscard]] bool is_exit_interrupt(const std::vector<std::byte>& code, std::size_t offset) {
     const auto interrupt = decoder::instruction_decoder::decode_at(code, offset);
     return interrupt && interrupt->kind == decoder::instruction_kind::interrupt && interrupt->interrupt_number == 0x21;
@@ -15,12 +26,16 @@ namespace {
 
 std::expected<std::uint8_t, compile_error>
 exit_program_compiler::extract_exit_code(const loader::program_image& image) {
-    const auto entry = image.entry_offset();
+    const auto entry_result = skip_nops(image.bytes, image.entry_offset());
+    if (!entry_result) return std::unexpected(entry_result.error());
+    const auto entry = *entry_result;
     const auto move = decoder::instruction_decoder::decode_at(image.bytes, entry);
     if (!move) return std::unexpected(compile_error{"cannot decode entry instruction: " + move.error().message});
     ir::register_ssa_builder ssa;
     auto state = ssa.entry_state();
-    const auto interrupt_offset = entry + move->size;
+    const auto interrupt_result = skip_nops(image.bytes, entry + move->size);
+    if (!interrupt_result) return std::unexpected(interrupt_result.error());
+    const auto interrupt_offset = *interrupt_result;
     const auto effect = semantics::instruction_translator::translate(image.bytes, *move, ssa, state);
     if (effect) {
         if (!is_exit_interrupt(image.bytes, interrupt_offset)) return std::unexpected(compile_error{"entry sequence does not terminate through INT 21h"});
@@ -36,9 +51,11 @@ exit_program_compiler::extract_exit_code(const loader::program_image& image) {
         return std::unexpected(compile_error{"cannot translate entry instruction: " + effect.error().message});
     }
     const auto low_move = decoder::instruction_decoder::decode_at(image.bytes, interrupt_offset);
+    const auto byte_interrupt_result = low_move ? skip_nops(image.bytes, interrupt_offset + low_move->size)
+                                                : std::expected<std::size_t, compile_error>{std::unexpected(compile_error{"cannot decode MOV AL, immediate"})};
     if (!low_move || low_move->size != 2 || interrupt_offset + 2 > image.bytes.size() ||
         std::to_integer<std::uint8_t>(image.bytes[interrupt_offset]) != 0xb0 ||
-        !is_exit_interrupt(image.bytes, interrupt_offset + low_move->size)) {
+        !byte_interrupt_result || !is_exit_interrupt(image.bytes, *byte_interrupt_result)) {
         return std::unexpected(compile_error{"INT 21h exit requires MOV AL, immediate after MOV AH, 4Ch"});
     }
     return std::to_integer<std::uint8_t>(image.bytes[interrupt_offset + 1]);

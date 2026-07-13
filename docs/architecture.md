@@ -65,8 +65,8 @@ semantics into this image remains the next backend stage.
 
 The first vertical compiler slice accepts `MOV AX, 4Cxxh; INT 21h` or the
 equivalent explicit byte-register sequence `MOV AH, 4Ch; MOV AL, xx; INT 21h`.
-It emits a native ELF that exits with `xx`; every other program is rejected
-rather than compiled with changed semantics.
+It accepts NOP padding around those instructions, emits a native ELF that exits
+with `xx`, and rejects every other program rather than changing semantics.
 
 ## IR
 
