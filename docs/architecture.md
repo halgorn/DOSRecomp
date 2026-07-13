@@ -101,6 +101,10 @@ services remain separate additions.
 teletype output (`AH=0Eh`) through a host-independent terminal state. Video
 memory, modes, and palette services remain separate runtime additions.
 
+`mode13_framebuffer` provides the memory model for 320×200 indexed pixels and
+a 256-entry palette, with checked coordinate access. SDL or another presenter
+can consume this isolated surface in a later backend.
+
 `INT 16h` provides deterministic keyboard read (`AH=00h`) and availability
 probe (`AH=01h`) over a caller-owned queue, keeping platform input policy out
 of translated program semantics.
