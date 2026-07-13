@@ -38,6 +38,13 @@ entry offset. It creates basic blocks at control-flow boundaries and reports a
 decoder failure or external branch target as an error. Indirect control flow,
 switch-table recovery, and function discovery depend on broader operand support.
 
+## Function recovery
+
+Function recovery identifies the program entry plus direct near-call targets.
+It records proven call sites and deliberately never promotes a jump target to a
+function. Indirect calls and shared-tail recovery remain unsupported pending
+complete operand decoding.
+
 ## IR
 
 The IR module lowers validated CFG block starts into stable numeric IDs and
