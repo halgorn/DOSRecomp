@@ -61,11 +61,10 @@ semantics into this image remains the next backend stage.
 
 ## Compiler pipeline
 
-The first vertical compiler slice accepts a loaded image whose entry sequence
-is exactly `MOV AX, 4Cxxh; INT 21h`, translates the register definition into
-SSA, and emits a native ELF that exits with `xx`. It is intentionally explicit
-about this boundary: every other program is rejected rather than compiled with
-changed semantics.
+The first vertical compiler slice accepts `MOV AX, 4Cxxh; INT 21h` or the
+equivalent explicit byte-register sequence `MOV AH, 4Ch; MOV AL, xx; INT 21h`.
+It emits a native ELF that exits with `xx`; every other program is rejected
+rather than compiled with changed semantics.
 
 ## IR
 

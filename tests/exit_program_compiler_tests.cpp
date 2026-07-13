@@ -19,7 +19,11 @@ int main() {
     const auto loaded_mz = dosrecomp::loader::binary_loader::load_bytes(mz);
     const auto mz_elf = loaded_mz ? dosrecomp::compiler::exit_program_compiler::compile(*loaded_mz)
                                   : std::expected<std::vector<std::byte>, dosrecomp::compiler::compile_error>{std::unexpected(dosrecomp::compiler::compile_error{"MZ load failed"})};
+    const auto byte_form = dosrecomp::loader::binary_loader::load_bytes({b(0xb4), b(0x4c), b(0xb0), b(3), b(0xcd), b(0x21)});
+    const auto byte_elf = byte_form ? dosrecomp::compiler::exit_program_compiler::compile(*byte_form)
+                                    : std::expected<std::vector<std::byte>, dosrecomp::compiler::compile_error>{std::unexpected(dosrecomp::compiler::compile_error{"byte form load failed"})};
     if (!elf || !exit_code || *exit_code != 7 || elf->size() != 132 || std::to_integer<unsigned char>((*elf)[126]) != 7 ||
+        !byte_elf || std::to_integer<unsigned char>((*byte_elf)[126]) != 3 ||
         !mz_elf || std::to_integer<unsigned char>((*mz_elf)[126]) != 9 || unsupported) {
         std::cerr << "failed end-to-end exit recompilation\n";
         return EXIT_FAILURE;
