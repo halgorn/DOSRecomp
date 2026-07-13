@@ -238,5 +238,50 @@ int main() {
         std::cerr << "runtime branch program did not exit 2/1 for y/n\n";
         return EXIT_FAILURE;
     }
+    const auto int16_program = std::vector<std::byte>{
+        b(0xb4), b(0x00),
+        b(0xcd), b(0x16),
+        b(0x3c), b(0x79),
+        b(0x74), b(0x05),
+        b(0xb8), b(0x01), b(0x4c),
+        b(0xeb), b(0x03),
+        b(0xb8), b(0x02), b(0x4c),
+        b(0xcd), b(0x21),
+    };
+    const auto int16_image = dosrecomp::loader::binary_loader::load_bytes(int16_program);
+    if (!int16_image) {
+        std::cerr << "failed to load INT 16h program\n";
+        return EXIT_FAILURE;
+    }
+    const auto int16_elf = dosrecomp::compiler::branching_compiler::compile(*int16_image);
+    if (!int16_elf) {
+        std::cerr << "failed to compile INT 16h program: " << int16_elf.error().message << "\n";
+        return EXIT_FAILURE;
+    }
+    const auto i16_path = std::filesystem::temp_directory_path() / ("dosrecomp-i16-" + std::to_string(getpid()));
+    {
+        std::ofstream output(i16_path, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(int16_elf->data()), static_cast<std::streamsize>(int16_elf->size()));
+    }
+    std::filesystem::permissions(i16_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    auto run_with_stdin_i16 = [&](const char* input) {
+        const auto pid = fork();
+        if (pid == 0) {
+            const std::string cmd = std::string{"echo "} + input + " | " + i16_path.string();
+            execl("/bin/sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
+            _exit(127);
+        }
+        int st = 0;
+        waitpid(pid, &st, 0);
+        return st;
+    };
+    const auto i16_y = run_with_stdin_i16("y");
+    const auto i16_n = run_with_stdin_i16("n");
+    std::filesystem::remove(i16_path);
+    if (!WIFEXITED(i16_y) || WEXITSTATUS(i16_y) != 2 ||
+        !WIFEXITED(i16_n) || WEXITSTATUS(i16_n) != 1) {
+        std::cerr << "INT 16h program did not exit 2/1 for y/n\n";
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }
