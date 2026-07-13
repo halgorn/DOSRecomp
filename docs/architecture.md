@@ -102,6 +102,10 @@ memory, modes, and palette services remain separate runtime additions.
 probe (`AH=01h`) over a caller-owned queue, keeping platform input policy out
 of translated program semantics.
 
+`INT 13h` provides validated `AH=02h` CHS reads from an in-memory virtual disk
+mapped as drive `80h`. Geometry, sector ranges, and image bounds are checked
+before data is returned.
+
 `virtual_drive` maps one absolute DOS drive into an explicit host root. It is a
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
 rejected before a filesystem operation is attempted.
