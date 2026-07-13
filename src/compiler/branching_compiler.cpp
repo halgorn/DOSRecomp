@@ -81,6 +81,8 @@ void emit_runtime_header(std::ostream& out) {
     out << "static uint32_t flags = 0;\n";
     out << "static int next_fake_handle = 3;\n";
     out << "static int handle_to_fd[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};\n";
+    out << "static uint16_t call_stack[256] = {0};\n";
+    out << "static int call_sp = 0;\n";
     out << "\n";
     out << "static inline void update_flags_cmp(uint16_t a, uint16_t b, bool is_byte) {\n";
     out << "    if (is_byte) { uint8_t aa = static_cast<uint8_t>(a), bb = static_cast<uint8_t>(b);\n";
@@ -316,14 +318,15 @@ emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t
             break;
         }
         if (decoded->kind == decoder::instruction_kind::return_) {
-            out << "  syscall(SYS_exit, regs[0] & 0xff);\n  return;\n";
-            position = next;
-            break;
+            out << "  if (call_sp == 0) { syscall(SYS_exit, regs[0] & 0xff); return; }\n  dispatch(call_stack[--call_sp]); return;\n";
+            position = next; break;
         }
         if (decoded->kind == decoder::instruction_kind::call) {
-            out << "  // CALL not yet supported in runtime branches\n  syscall(SYS_exit, 1); return;\n";
-            position = next;
-            break;
+            if (decoded->indirect) { out << "  // indirect CALL\n  syscall(SYS_exit, 1); return;\n"; position = next; break; }
+            const auto ret_addr = static_cast<std::uint32_t>(position + decoded->size);
+            const auto target = static_cast<std::uint32_t>(position + decoded->size + decoded->relative_target);
+            out << "  call_stack[call_sp++] = " << ret_addr << "u;\n  " << block_label(static_cast<std::size_t>(target)) << "();\n";
+            position = next; break;
         }
         switch (decoded->kind) {
         case decoder::instruction_kind::move_immediate:

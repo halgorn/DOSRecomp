@@ -283,5 +283,28 @@ int main() {
         std::cerr << "INT 16h program did not exit 2/1 for y/n\n";
         return EXIT_FAILURE;
     }
+    const auto callret_program = std::vector<std::byte>{
+        b(0xb4), b(0x07),
+        b(0xe8), b(0x04), b(0x00),
+        b(0xb4), b(0x4c),
+        b(0xcd), b(0x21),
+        b(0x88), b(0xe0),
+        b(0xc3),
+    };
+    const auto callret_image = dosrecomp::loader::binary_loader::load_bytes(callret_program);
+    if (!callret_image) { std::cerr << "failed to load CALL/RET program\n"; return EXIT_FAILURE; }
+    const auto callret_elf = dosrecomp::compiler::branching_compiler::compile(*callret_image);
+    if (!callret_elf) { std::cerr << "failed to compile CALL/RET program: " << callret_elf.error().message << "\n"; return EXIT_FAILURE; }
+    const auto cr_path = std::filesystem::temp_directory_path() / ("dosrecomp-cr-" + std::to_string(getpid()));
+    { std::ofstream output(cr_path, std::ios::binary); output.write(reinterpret_cast<const char*>(callret_elf->data()), static_cast<std::streamsize>(callret_elf->size())); }
+    std::filesystem::permissions(cr_path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    const auto cr_pid = fork();
+    if (cr_pid == 0) { execl(cr_path.string().c_str(), cr_path.string().c_str(), static_cast<char*>(nullptr)); _exit(127); }
+    int cr_status = 0; waitpid(cr_pid, &cr_status, 0);
+    std::filesystem::remove(cr_path);
+    if (!WIFEXITED(cr_status) || WEXITSTATUS(cr_status) != 7) {
+        std::cerr << "CALL/RET program did not exit 7\n";
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }
