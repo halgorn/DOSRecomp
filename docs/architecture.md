@@ -117,6 +117,10 @@ returning an allocated segment only after the request is validated.
 lexical sandbox: other drives, relative paths, and `.`/`..` components are
 rejected before a filesystem operation is attempted.
 
+`virtual_file_system` layers DOS-style handles over that drive for safe
+read-only opening, bounded reads, and close operations. It starts handles at
+five, rejects invalid handles, and never resolves a path outside the drive.
+
 ## Optimizer
 
 Constant propagation consumes immutable SSA values and computes facts without
