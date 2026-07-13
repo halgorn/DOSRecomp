@@ -24,6 +24,8 @@ public:
     [[nodiscard]] std::expected<void, memory_error> write16(std::uint32_t address, std::uint16_t value);
     [[nodiscard]] std::expected<std::uint8_t, memory_error> read8(std::uint16_t segment, std::uint16_t offset) const;
     [[nodiscard]] std::expected<void, memory_error> write8(std::uint16_t segment, std::uint16_t offset, std::uint8_t value);
+    [[nodiscard]] std::expected<std::uint16_t, memory_error> read16(std::uint16_t segment, std::uint16_t offset) const;
+    [[nodiscard]] std::expected<void, memory_error> write16(std::uint16_t segment, std::uint16_t offset, std::uint16_t value);
 private:
     std::vector<std::byte> bytes_;
 };
