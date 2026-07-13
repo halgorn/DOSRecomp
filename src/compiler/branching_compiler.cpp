@@ -288,7 +288,7 @@ void emit_arithmetic(std::ostream& out, const decoder::instruction& decoded) {
 
 [[nodiscard]] std::expected<void, branching_compile_error>
 emit_block_at(std::ostream& out, const loader::program_image& image, std::size_t start) {
-    out << "static void " << block_label(start) << "() {\n";
+    out << "static inline __attribute__((always_inline)) void " << block_label(start) << "() {\n";
     std::size_t position = start;
     while (position < image.bytes.size()) {
         const auto decoded = decoder::instruction_decoder::decode_at(image.bytes, position);
@@ -443,7 +443,7 @@ emit_c_runtime(const loader::program_image& image) {
     if (!starts) return std::unexpected(starts.error());
     std::ostringstream out;
     emit_runtime_header(out);
-    for (const auto start : *starts) out << "static void " << block_label(start) << "();\n";
+    for (const auto start : *starts) out << "static inline __attribute__((always_inline)) void " << block_label(start) << "();\n";
     out << "\n";
     for (const auto start : *starts) {
         const auto result = emit_block_at(out, image, start);
