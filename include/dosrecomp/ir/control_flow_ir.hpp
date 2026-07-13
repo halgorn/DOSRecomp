@@ -19,6 +19,7 @@ struct ir_block {
     std::size_t source_start{};
     terminator_kind terminator{};
     std::vector<std::size_t> successors;
+    decoder::branch_condition condition{decoder::branch_condition::always};
 };
 
 /** A stable, target-independent control-flow program representation. */
@@ -35,4 +36,3 @@ public:
 };
 
 } // namespace dosrecomp::ir
-

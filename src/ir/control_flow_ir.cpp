@@ -15,7 +15,7 @@ control_flow_lowerer::lower(const cfg::control_flow_graph& graph) {
     program.blocks.reserve(graph.blocks.size());
     for (std::size_t index = 0; index < graph.blocks.size(); ++index) {
         const auto& source = graph.blocks[index];
-        ir_block block{.id = index, .source_start = source.start, .terminator = terminator_kind::stop, .successors = {}};
+        ir_block block{.id = index, .source_start = source.start, .terminator = terminator_kind::stop, .successors = {}, .condition = source.condition};
         for (const auto target : source.successors) {
             const auto found = ids.find(target);
             if (found == ids.end()) return std::unexpected(ir_error{"CFG successor does not start a block"});

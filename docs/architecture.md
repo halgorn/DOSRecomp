@@ -90,7 +90,8 @@ rather than changing semantics.
 
 The IR module lowers validated CFG block starts into stable numeric IDs and
 explicit `stop`, `jump`, or `branch` terminators. It deliberately contains no
-machine-dependent operands; instruction-to-SSA lowering will add typed values
+machine-dependent operands, but preserves exact decoded branch conditions on
+conditional terminators; instruction-to-SSA lowering will add typed values
 and phi nodes above this verified control-flow foundation. The module depends
 only on CFG and rejects dangling or ambiguous successor relationships.
 

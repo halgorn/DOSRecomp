@@ -15,6 +15,7 @@ struct basic_block {
     std::size_t start{};
     std::size_t end{};
     std::vector<std::size_t> successors;
+    decoder::branch_condition condition{decoder::branch_condition::always};
 };
 
 /** Reachable direct-control-flow graph. */
@@ -34,4 +35,3 @@ public:
 };
 
 } // namespace dosrecomp::cfg
-
