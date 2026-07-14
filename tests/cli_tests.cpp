@@ -60,6 +60,8 @@ int main() {
     const auto byte_output = root.string() + "-byte.elf";
     const auto console_input = root.string() + "-console.com";
     const auto console_output = root.string() + "-console.elf";
+    const auto repmovsb_input = root.string() + "-repmovsb.com";
+    const auto repmovsb_output = root.string() + "-repmovsb.elf";
     {
         std::ofstream file(input, std::ios::binary);
         const std::array<unsigned char, 5> program{0xb8, 0x07, 0x4c, 0xcd, 0x21};
@@ -82,6 +84,19 @@ int main() {
         file.close();
         if (!file) return EXIT_FAILURE;
     }
+    {
+        std::ofstream file(repmovsb_input, std::ios::binary);
+        const std::array<unsigned char, 30> program{
+            0xbe, 0x1e, 0x01, 0xbf, 0x23, 0x01, 0xb9, 0x05, 0x00,
+            0xfc, 0xf3, 0xa4, 0xba, 0x23, 0x01, 0xb4, 0x09, 0xcd,
+            0x21, 0xb8, 0x00, 0x4c, 0xcd, 0x21, 0x90, 0x90, 0x90,
+            0x90, 0x90, 0x90};
+        file.write(reinterpret_cast<const char*>(program.data()), static_cast<std::streamsize>(program.size()));
+        const char data[] = {'T', 'E', 'S', 'T', '$', 0, 0, 0, 0, 0};
+        file.write(data, sizeof(data));
+        file.close();
+        if (!file) return EXIT_FAILURE;
+    }
     const auto compile_status = run(DOSRECOMP_CLI_PATH, input, output);
     const auto output_status = compile_status == 0 ? run_output(output) : 255;
     const auto byte_compile_status = run(DOSRECOMP_CLI_PATH, byte_input, byte_output);
@@ -98,6 +113,18 @@ int main() {
         console_text = std::string{std::istreambuf_iterator<char>{captured}, {}};
         std::filesystem::remove(capture_path);
     }
+    const auto repmovsb_compile_status = run(DOSRECOMP_CLI_PATH, repmovsb_input, repmovsb_output);
+    int repmovsb_status = 255;
+    std::string repmovsb_text;
+    if (repmovsb_compile_status == 0) {
+        const std::filesystem::path repmovsb_output_path = repmovsb_output;
+        const auto capture_path = repmovsb_output_path.string() + ".captured";
+        const auto cmd = repmovsb_output_path.string() + " > " + capture_path;
+        repmovsb_status = std::system(cmd.c_str());
+        std::ifstream captured(capture_path, std::ios::binary);
+        repmovsb_text = std::string{std::istreambuf_iterator<char>{captured}, {}};
+        std::filesystem::remove(capture_path);
+    }
     const auto [dot_status, dot_output] = run_text_option(DOSRECOMP_CLI_PATH, input, "--emit-dot");
     const auto [llvm_status, llvm_output] = run_text_option(DOSRECOMP_CLI_PATH, input, "--emit-llvm");
     std::filesystem::remove(input);
@@ -106,9 +133,13 @@ int main() {
     std::filesystem::remove(byte_output);
     std::filesystem::remove(console_input);
     std::filesystem::remove(console_output);
+    std::filesystem::remove(repmovsb_input);
+    std::filesystem::remove(repmovsb_output);
     if (compile_status != 0 || output_status != 7 || byte_compile_status != 0 || byte_output_status != 3 ||
         console_compile_status != 0 || console_status == -1 || !WIFEXITED(console_status) || WEXITSTATUS(console_status) != 6 ||
         console_text != "ok\n" ||
+        repmovsb_compile_status != 0 || repmovsb_status == -1 || !WIFEXITED(repmovsb_status) || WEXITSTATUS(repmovsb_status) != 0 ||
+        repmovsb_text != "TEST" ||
         dot_status != 0 || dot_output.rfind("digraph cfg", 0) != 0 || llvm_status != 0 ||
         llvm_output.find("ret i32 7") == std::string::npos) {
         std::cerr << "CLI recompilation integration test failed\n";

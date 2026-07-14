@@ -84,22 +84,23 @@ void emit_runtime_header(std::ostream& out) {
 }
 
 void emit_int21_runtime(std::ostream& out) {
+    const auto ds_idx = std::to_string(word_reg_index(decoder::register_name::ds));
     out <<
         "  { const uint16_t __ax = regs[0]; const uint8_t ah = (uint8_t)(__ax >> 8), al = (uint8_t)__ax;\n"
         "    switch (ah) {\n"
         "    case 0x4c: syscall(SYS_exit, __ax & 0xff); return;\n"
         "    case 0x02: { uint8_t ch = (uint8_t)regs[2]; syscall(SYS_write, 1, &ch, 1); break; }\n"
-        "    case 0x09: { uint32_t base = ((uint32_t)regs[11] << 4) + regs[2], len = 0;\n"
+        "    case 0x09: { uint32_t base = ((uint32_t)regs[" + ds_idx + "] << 4) + regs[2], len = 0;\n"
         "      while (mem[base + len] != '$') ++len; syscall(SYS_write, 1, &mem[base], len); break; }\n"
         "    case 0x01: { char ch = 0; long r = syscall(SYS_read, 0, &ch, 1);\n"
         "      if (r <= 0) { syscall(SYS_exit, 1); return; }\n"
         "      regs[0] = (regs[0] & 0xff00) | (uint16_t)(uint8_t)ch; break; }\n"
-        "    case 0x0a: { uint32_t base = ((uint32_t)regs[11] << 4) + regs[2];\n"
+        "    case 0x0a: { uint32_t base = ((uint32_t)regs[" + ds_idx + "] << 4) + regs[2];\n"
         "      uint8_t cap = mem[base], idx = 1;\n"
         "      while (idx <= cap) { char ch = 0; long r = syscall(SYS_read, 0, &ch, 1);\n"
         "        if (r <= 0 || ch == '\\n') break; mem[base + idx] = (uint8_t)ch; ++idx; }\n"
         "      mem[base + 1] = idx - 1; regs[0] = idx - 1; break; }\n"
-        "    case 0x3d: { uint32_t base = ((uint32_t)regs[11] << 4) + regs[2], len = 0;\n"
+        "    case 0x3d: { uint32_t base = ((uint32_t)regs[" + ds_idx + "] << 4) + regs[2], len = 0;\n"
         "      while (mem[base + len] != 0) ++len; int oflags = 0;\n"
         "      if (al == 0) oflags = O_RDONLY; else if (al == 1) oflags = O_WRONLY | O_CREAT | O_TRUNC;\n"
         "      else if (al == 2) oflags = O_RDWR | O_CREAT; else { syscall(SYS_exit, 1); return; }\n"
@@ -109,19 +110,19 @@ void emit_int21_runtime(std::ostream& out) {
         "    case 0x3e: { int h = regs[3] & 0xff;\n"
         "      if (h >= 3 && h < 16 && handle_to_fd[h] >= 0) { close(handle_to_fd[h]); handle_to_fd[h] = -1; } break; }\n"
         "    case 0x3f: { int h = regs[3] & 0xff; uint16_t cnt = regs[1];\n"
-        "      uint32_t base = ((uint32_t)regs[11] << 4) + regs[2];\n"
+        "      uint32_t base = ((uint32_t)regs[" + ds_idx + "] << 4) + regs[2];\n"
         "      int src = (h >= 3 && h < 16) ? handle_to_fd[h] : 0;\n"
         "      long r = (cnt > 0 && src >= 0) ? syscall(SYS_read, src, &mem[base], cnt) : 0;\n"
         "      regs[0] = (r > 0) ? (uint16_t)r : 0; break; }\n"
         "    case 0x40: { int h = regs[3] & 0xff; uint16_t cnt = regs[1];\n"
-        "      uint32_t base = ((uint32_t)regs[11] << 4) + regs[2];\n"
+        "      uint32_t base = ((uint32_t)regs[" + ds_idx + "] << 4) + regs[2];\n"
         "      int dst = (h == 1) ? 1 : (h == 2) ? 2 : (h >= 3 && h < 16) ? handle_to_fd[h] : 1;\n"
         "      if (cnt > 0) syscall(SYS_write, dst, &mem[base], cnt); break; }\n"
         "    case 0x2a: case 0x2c: { struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);\n"
         "      struct tm tm; gmtime_r(&ts.tv_sec, &tm);\n"
         "      if (ah == 0x2a) regs[0] = (uint16_t)(((tm.tm_year + 1900 - 1980) << 9) | (tm.tm_mon << 5) | tm.tm_mday), regs[2] = 0;\n"
         "      else regs[0] = (uint16_t)((tm.tm_hour << 8) | tm.tm_min), regs[2] = tm.tm_sec; break; }\n"
-        "    case 0x3b: { uint32_t base = ((uint32_t)regs[11] << 4) + regs[2], len = 0;\n"
+        "    case 0x3b: { uint32_t base = ((uint32_t)regs[" + ds_idx + "] << 4) + regs[2], len = 0;\n"
         "      while (mem[base + len]) ++len; char tmp[260] = {0};\n"
         "      for (uint32_t k = 0; k < len && k < 259; ++k) tmp[k] = (char)mem[base + k];\n"
         "      regs[0] = chdir(tmp) == 0 ? 0u : 0x0005u; break; }\n"
@@ -246,28 +247,26 @@ void emit_string_op(std::ostream& out, const loader::program_image& image, const
         else if (decoded.rep == decoder::rep_prefix::repne) out << " if ((flags & 0x40u)) break;";
         out << " }\n";
     };
+    constexpr std::size_t si_i = 6, di_i = 7;
     const auto sd = std::to_string(d);
-    const auto step_si = "regs[14] = (uint16_t)(regs[14] + df_step(" + sd + "));";
-    const auto step_di = "regs[15] = (uint16_t)(regs[15] + df_step(" + sd + "));";
+    const std::string sreg = std::to_string(si_i), dreg = std::to_string(di_i);
+    const auto step_si = "regs[" + sreg + "] = (uint16_t)(regs[" + sreg + "] + df_step(" + sd + "));";
+    const auto step_di = "regs[" + dreg + "] = (uint16_t)(regs[" + dreg + "] + df_step(" + sd + "));";
     if (base == 0xa4) {
-        if (word) wrap("uint16_t __v = (uint16_t)mem[regs[14]] | ((uint16_t)mem[regs[14]+1] << 8); "
-            "mem[regs[15]] = (uint8_t)__v; mem[regs[15]+1] = (uint8_t)(__v >> 8); " + step_si + " " + step_di);
-        else wrap("mem[regs[15]] = mem[regs[14]]; " + step_si + " " + step_di);
+        if (word) wrap("uint16_t __v = (uint16_t)mem[regs[" + sreg + "]] | ((uint16_t)mem[regs[" + sreg + "]+1] << 8); mem[regs[" + dreg + "]] = (uint8_t)__v; mem[regs[" + dreg + "]+1] = (uint8_t)(__v >> 8); " + step_si + " " + step_di);
+        else wrap("mem[regs[" + dreg + "]] = mem[regs[" + sreg + "]]; " + step_si + " " + step_di);
     } else if (base == 0xaa) {
-        if (word) wrap("mem[regs[15]] = (uint8_t)regs[0]; mem[regs[15]+1] = (uint8_t)(regs[0] >> 8); " + step_di);
-        else wrap("mem[regs[15]] = (uint8_t)regs[0]; " + step_di);
+        if (word) wrap("mem[regs[" + dreg + "]] = (uint8_t)regs[0]; mem[regs[" + dreg + "]+1] = (uint8_t)(regs[0] >> 8); " + step_di);
+        else wrap("mem[regs[" + dreg + "]] = (uint8_t)regs[0]; " + step_di);
     } else if (base == 0xac) {
-        if (word) wrap("regs[0] = (uint16_t)mem[regs[14]] | ((uint16_t)mem[regs[14]+1] << 8); " + step_si);
-        else wrap("regs[0] = (regs[0] & 0xff00) | mem[regs[14]]; " + step_si);
+        if (word) wrap("regs[0] = (uint16_t)mem[regs[" + sreg + "]] | ((uint16_t)mem[regs[" + sreg + "]+1] << 8); " + step_si);
+        else wrap("regs[0] = (regs[0] & 0xff00) | mem[regs[" + sreg + "]]; " + step_si);
     } else if (base == 0xa6) {
-        if (word) wrap("uint16_t __a = (uint16_t)mem[regs[14]] | ((uint16_t)mem[regs[14]+1] << 8); "
-            "uint16_t __b = (uint16_t)mem[regs[15]] | ((uint16_t)mem[regs[15]+1] << 8); "
-            "update_flags_cmp(__a, __b, false); " + step_si + " " + step_di);
-        else wrap("update_flags_cmp(mem[regs[14]], mem[regs[15]], true); " + step_si + " " + step_di);
+        if (word) wrap("uint16_t __a = (uint16_t)mem[regs[" + sreg + "]] | ((uint16_t)mem[regs[" + sreg + "]+1] << 8); uint16_t __b = (uint16_t)mem[regs[" + dreg + "]] | ((uint16_t)mem[regs[" + dreg + "]+1] << 8); update_flags_cmp(__a, __b, false); " + step_si + " " + step_di);
+        else wrap("update_flags_cmp(mem[regs[" + sreg + "]], mem[regs[" + dreg + "]], true); " + step_si + " " + step_di);
     } else if (base == 0xae) {
-        if (word) wrap("uint16_t __b = (uint16_t)mem[regs[15]] | ((uint16_t)mem[regs[15]+1] << 8); "
-            "update_flags_cmp(regs[0], __b, false); " + step_di);
-        else wrap("update_flags_cmp((uint8_t)regs[0], mem[regs[15]], true); " + step_di);
+        if (word) wrap("uint16_t __b = (uint16_t)mem[regs[" + dreg + "]] | ((uint16_t)mem[regs[" + dreg + "]+1] << 8); update_flags_cmp(regs[0], __b, false); " + step_di);
+        else wrap("update_flags_cmp((uint8_t)regs[0], mem[regs[" + dreg + "]], true); " + step_di);
     } else out << "  // unsupported string op 0x" << std::hex << op << std::dec << "\n";
 }
 
@@ -354,9 +353,13 @@ emit_block_body(std::ostream& out, const loader::program_image& image, std::size
             out << "  if (call_sp == 0) { syscall(SYS_exit, regs[0] & 0xff); return; }\n  dispatch(call_stack[--call_sp]); return;\n";
             position = next; break;
         }
-        if (decoded->kind == decoder::instruction_kind::string) { emit_string_op(out, image, *decoded); position = next; break; }
-        if (decoded->kind == decoder::instruction_kind::flags && position + 1 < image.bytes.size()) {
-            const auto b = std::to_integer<std::uint8_t>(image.bytes[position + 1]);
+        if (decoded->kind == decoder::instruction_kind::string) {
+            emit_string_op(out, image, *decoded);
+            if (next < image.bytes.size() && block_targets.contains(next)) out << "  " << block_label(next) << "();\n";
+            position = next; break;
+        }
+        if (decoded->kind == decoder::instruction_kind::flags && position < image.bytes.size()) {
+            const auto b = std::to_integer<std::uint8_t>(image.bytes[position]);
             if (b == 0xfc) { out << "  flags &= ~0x400u;\n"; position = next; continue; }
             if (b == 0xfd) { out << "  flags |= 0x400u;\n"; position = next; continue; }
         }
@@ -493,9 +496,6 @@ std::expected<std::vector<std::byte>, branching_compile_error> branching_compile
     return data;
 }
 std::expected<std::string, branching_compile_error> branching_compiler::emit_llvm(const loader::program_image& image) {
-    const auto result = straight_line_compiler::emit_llvm(image);
-    if (!result) return std::unexpected(branching_compile_error{result.error().message});
-    return *result;
-}
-
-} // namespace dosrecomp::compiler
+    const auto r = straight_line_compiler::emit_llvm(image);
+    return r ? std::expected<std::string, branching_compile_error>{*r} : std::unexpected(branching_compile_error{r.error().message});
+} } // namespace dosrecomp::compiler
