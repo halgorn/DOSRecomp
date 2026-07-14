@@ -31,6 +31,9 @@ public:
 
     [[nodiscard]] static std::expected<std::string, branching_compile_error>
     emit_llvm(const loader::program_image& image);
+
+    [[nodiscard]] static std::expected<std::string, branching_compile_error>
+    emit_c_source(const loader::program_image& image);
 };
 
 } // namespace dosrecomp::compiler

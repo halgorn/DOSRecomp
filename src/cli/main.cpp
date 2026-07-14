@@ -12,24 +12,27 @@
 
 namespace {
 void print_usage() {
-    std::cerr << "Usage: dosrecomp <input.com|input.exe> [-o output|--verbose|--emit-cfg|--emit-dot|--emit-ir|--emit-cpp|--emit-llvm]\n";
+    std::cerr << "Usage: dosrecomp <input.com|input.exe> [-o output|--verbose|--emit-cfg|--emit-dot|--emit-ir|--emit-cpp|--emit-llvm|--keep-cpp]\n";
 }
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2 || argc > 4) {
+    if (argc < 2 || argc > 5) {
         print_usage();
         return 2;
     }
-    const auto option = argc == 3 ? std::string_view(argv[2]) : std::string_view{};
+    const auto option = argc == 3 ? std::string_view(argv[2])
+                          : argc == 5 ? std::string_view(argv[4])
+                          : std::string_view{};
     const bool verbose = option == "--verbose";
     const bool emit_cfg = option == "--emit-cfg";
     const bool emit_dot = option == "--emit-dot";
     const bool emit_ir = option == "--emit-ir";
     const bool emit_cpp = option == "--emit-cpp";
     const bool emit_llvm = option == "--emit-llvm";
-    const bool explicit_output = argc == 4 && std::string_view(argv[2]) == "-o";
-    if ((argc == 3 && !verbose && !emit_cfg && !emit_dot && !emit_ir && !emit_cpp && !emit_llvm) || (argc == 4 && !explicit_output)) {
+    const bool keep_cpp = option == "--keep-cpp";
+    const bool explicit_output = (argc == 4 || argc == 5) && std::string_view(argv[2]) == "-o";
+    if ((argc == 3 && !verbose && !emit_cfg && !emit_dot && !emit_ir && !emit_cpp && !emit_llvm && !keep_cpp) || ((argc == 4 || argc == 5) && !explicit_output)) {
         print_usage();
         return 2;
     }
@@ -135,4 +138,25 @@ int main(int argc, char* argv[]) {
         std::cout << "compiled " << bytes.size() << " bytes\n";
     }
     std::cout << "Wrote " << output_path.string() << '\n';
+    if (keep_cpp) {
+        if (executable) {
+            const auto cpp = dosrecomp::compiler::branching_compiler::emit_c_source(*result);
+            if (cpp) {
+                auto cpp_path = output_path;
+                cpp_path.replace_extension(".cpp");
+                std::ofstream cpp_out(cpp_path, std::ios::binary | std::ios::trunc);
+                cpp_out.write(cpp->data(), static_cast<std::streamsize>(cpp->size()));
+                if (cpp_out) std::cout << "Wrote " << cpp_path.string() << '\n';
+            }
+        } else {
+            const auto cpp = dosrecomp::compiler::cpp_backend::emit(*result);
+            if (cpp) {
+                auto cpp_path = output_path;
+                cpp_path.replace_extension(".cpp");
+                std::ofstream cpp_out(cpp_path, std::ios::binary | std::ios::trunc);
+                cpp_out.write(cpp->data(), static_cast<std::streamsize>(cpp->size()));
+                if (cpp_out) std::cout << "Wrote " << cpp_path.string() << '\n';
+            }
+        }
+    }
 }

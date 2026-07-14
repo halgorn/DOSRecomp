@@ -10,10 +10,11 @@
 #include <unistd.h>
 
 namespace {
-int run(const std::filesystem::path& executable, const std::filesystem::path& first, const std::filesystem::path& second) {
+int run(const std::filesystem::path& executable, const std::filesystem::path& first, const std::filesystem::path& second, const char* extra = nullptr) {
     const auto child = fork();
     if (child == 0) {
-        execl(executable.c_str(), executable.c_str(), first.c_str(), "-o", second.c_str(), nullptr);
+        if (extra) execl(executable.c_str(), executable.c_str(), first.c_str(), "-o", second.c_str(), extra, nullptr);
+        else execl(executable.c_str(), executable.c_str(), first.c_str(), "-o", second.c_str(), nullptr);
         _exit(127);
     }
     int status = 0;
@@ -127,6 +128,11 @@ int main() {
     }
     const auto [dot_status, dot_output] = run_text_option(DOSRECOMP_CLI_PATH, input, "--emit-dot");
     const auto [llvm_status, llvm_output] = run_text_option(DOSRECOMP_CLI_PATH, input, "--emit-llvm");
+    const auto keepcpp_status = run(DOSRECOMP_CLI_PATH, input, output + ".kept", "--keep-cpp");
+    const auto keepcpp_path = std::filesystem::path(output + ".kept").replace_extension(".cpp");
+    const bool keepcpp_written = keepcpp_status == 0 && std::filesystem::exists(keepcpp_path);
+    std::filesystem::remove(output + ".kept");
+    std::filesystem::remove(keepcpp_path);
     std::filesystem::remove(input);
     std::filesystem::remove(output);
     std::filesystem::remove(byte_input);
@@ -141,7 +147,7 @@ int main() {
         repmovsb_compile_status != 0 || repmovsb_status == -1 || !WIFEXITED(repmovsb_status) || WEXITSTATUS(repmovsb_status) != 0 ||
         repmovsb_text != "TEST" ||
         dot_status != 0 || dot_output.rfind("digraph cfg", 0) != 0 || llvm_status != 0 ||
-        llvm_output.find("ret i32 7") == std::string::npos) {
+        llvm_output.find("ret i32 7") == std::string::npos || !keepcpp_written) {
         std::cerr << "CLI recompilation integration test failed\n";
         return EXIT_FAILURE;
     }

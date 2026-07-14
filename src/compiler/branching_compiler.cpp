@@ -469,6 +469,10 @@ std::expected<std::string, branching_compile_error> emit_c_runtime(const loader:
 }
 } // namespace
 
+std::expected<std::string, branching_compile_error> branching_compiler::emit_c_source(const loader::program_image& image) {
+    return emit_c_runtime(image);
+}
+
 std::expected<std::uint8_t, branching_compile_error> branching_compiler::extract_exit_code(const loader::program_image& image) {
     const auto result = straight_line_compiler::extract_exit_code(image);
     if (!result) return std::unexpected(branching_compile_error{result.error().message});
