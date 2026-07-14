@@ -46,7 +46,8 @@ modrm_size(const std::vector<std::byte>& code, std::size_t offset, std::uint8_t 
 
 [[nodiscard]] bool is_prefix(std::uint8_t opcode) {
     return opcode == 0x26 || opcode == 0x2e || opcode == 0x36 || opcode == 0x3e ||
-           opcode == 0xf0 || opcode == 0xf2 || opcode == 0xf3;
+           opcode == 0xf0 || opcode == 0xf2 || opcode == 0xf3 ||
+           opcode == 0x66 || opcode == 0x67;
 }
 
 [[nodiscard]] register_name register_for(std::uint8_t encoding, operand_width width) {
@@ -124,11 +125,15 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         std::size_t next = offset;
         std::uint8_t prefix_count = 0;
         rep_prefix rep = rep_prefix::none;
+        bool op_override = false;
+        bool addr_override = false;
         while (next < code.size() && is_prefix(byte_at(code, next))) {
             if (prefix_count == 15) return std::unexpected(decode_error{"8086 instruction has too many prefixes"});
             const auto p = byte_at(code, next);
             if (p == 0xf3) rep = rep == rep_prefix::none ? rep_prefix::rep : rep;
             else if (p == 0xf2) rep = rep == rep_prefix::none ? rep_prefix::repne : rep;
+            else if (p == 0x66) op_override = true;
+            else if (p == 0x67) addr_override = true;
             ++prefix_count;
             ++next;
         }
@@ -142,6 +147,8 @@ instruction_decoder::decode_at(const std::vector<std::byte>& code, std::size_t o
         prefixed.offset = offset;
         prefixed.size = static_cast<std::uint8_t>(prefixed.size + prefix_count);
         if (rep != rep_prefix::none) prefixed.rep = rep;
+        prefixed.operand_size_override = op_override;
+        prefixed.address_size_override = addr_override;
         return prefixed;
     }
     const auto relative8 = [&]() -> std::expected<instruction, decode_error> {

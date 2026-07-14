@@ -71,6 +71,8 @@ struct instruction {
     bool stack_pop{false};
     bool indirect{false};
     rep_prefix rep{rep_prefix::none};
+    bool operand_size_override{false};
+    bool address_size_override{false};
 };
 
 /** A malformed, truncated, or not-yet-supported instruction. */
