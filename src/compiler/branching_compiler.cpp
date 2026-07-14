@@ -135,6 +135,8 @@ void emit_int21_runtime(std::ostream& out) {
         "      regs[0] = next_seg; regs[2] = 0; regs[3] = want; next_seg = (uint16_t)(next_seg + want); break; }\n"
         "    case 0x49: regs[0] = 0; regs[3] = 0; break;\n"
         "    case 0x4a: regs[0] = 0; break;\n"
+        "    case 0x19: regs[0] = (regs[0] & 0xff00) | 0x00u; break;\n"
+        "    case 0x0e: regs[0] = (regs[0] & 0xff00) | 0x03u; break;\n"
         "    default: syscall(SYS_exit, 1); return;\n    }\n  }\n";
 }
 
@@ -149,13 +151,16 @@ void emit_int10_runtime(std::ostream& out) {
         "    case 0x0a: { uint8_t ch = al;\n"
         "      for (uint16_t k = 0; k < cx_count; ++k) syscall(SYS_write, 1, &ch, 1); break; }\n"
         "    case 0x02: break;\n"
+        "    case 0x00: break;\n"
+        "    case 0x0c: regs[0] = (regs[0] & 0xff00); break;\n"
+        "    case 0x0d: regs[0] = (regs[0] & 0xff00); break;\n"
         "    default: syscall(SYS_exit, 1); return;\n    }\n  }\n";
 }
 
 void emit_int16_runtime(std::ostream& out) {
     out <<
         "  { const uint8_t ah = (uint8_t)(regs[0] >> 8);\n"
-        "    if (ah == 0x00 || ah == 0x10) {\n"
+        "    if (ah == 0x00 || ah == 0x10 || ah == 0x01 || ah == 0x11) {\n"
         "      char ch = 0; long r;\n"
         "      do { r = syscall(SYS_read, 0, &ch, 1); } while (r == -1);\n"
         "      if (r < 0) { syscall(SYS_exit, 1); return; }\n"
@@ -182,7 +187,6 @@ void emit_mem_store(std::ostream& out, const std::string& addr, bool is_byte, co
     out << "  mem[" << addr << "] = static_cast<uint8_t>(" << value << ");\n"
         << "  mem[" << addr << " + 1] = static_cast<uint8_t>((" << value << ") >> 8);\n";
 }
-
 void emit_move_immediate(std::ostream& out, const decoder::instruction& decoded) {
     const auto& dst = decoded.operands[0];
     const auto width = dst.width;
@@ -315,12 +319,9 @@ std::expected<void, branching_compile_error> emit_block_at(std::ostream& out, co
         if (!emit_conditional(out, loop_cond)) out << "false";
         out << ");\n";
     } else { const auto body_result = emit_block_body(out, image, start, 0, block_targets); if (!body_result) return body_result; }
-    out << "}\n\n";
-    return {};
+    out << "}\n\n"; return {};
 }
-
-std::expected<void, branching_compile_error>
-emit_block_body(std::ostream& out, const loader::program_image& image, std::size_t start, std::size_t stop_before, const std::set<std::size_t>& block_targets) {
+std::expected<void, branching_compile_error> emit_block_body(std::ostream& out, const loader::program_image& image, std::size_t start, std::size_t stop_before, const std::set<std::size_t>& block_targets) {
     std::size_t position = start;
     while (position < image.bytes.size()) {
         if (stop_before != 0 && position == stop_before) break;
@@ -448,9 +449,7 @@ void emit_image_array(std::ostream& out, const std::vector<std::byte>& bytes) {
     out << "  " << block_label(image.entry_offset()) << "();\n  return 0;\n}\n";
     return {};
 }
-
-[[nodiscard]] std::expected<void, branching_compile_error>
-emit_dispatch(std::ostream& out, const std::set<std::size_t>& targets) {
+[[nodiscard]] std::expected<void, branching_compile_error> emit_dispatch(std::ostream& out, const std::set<std::size_t>& targets) {
     out << "static void dispatch(uint32_t target) {\n  switch (target) {\n";
     for (const auto t : targets)
         out << "    case 0x" << std::hex << t << std::dec << ": " << block_label(t) << "(); return;\n";
@@ -468,15 +467,12 @@ std::expected<std::string, branching_compile_error> emit_c_runtime(const loader:
     return out.str();
 }
 } // namespace
-
 std::expected<std::string, branching_compile_error> branching_compiler::emit_c_source(const loader::program_image& image) {
     return emit_c_runtime(image);
 }
-
 std::expected<std::uint8_t, branching_compile_error> branching_compiler::extract_exit_code(const loader::program_image& image) {
-    const auto result = straight_line_compiler::extract_exit_code(image);
-    if (!result) return std::unexpected(branching_compile_error{result.error().message});
-    return *result;
+    const auto r = straight_line_compiler::extract_exit_code(image);
+    return r ? std::expected<std::uint8_t, branching_compile_error>{*r} : std::unexpected(branching_compile_error{r.error().message});
 }
 std::expected<std::vector<std::byte>, branching_compile_error> branching_compiler::compile(const loader::program_image& image) {
     const auto c_source = emit_c_runtime(image);
@@ -502,4 +498,4 @@ std::expected<std::vector<std::byte>, branching_compile_error> branching_compile
 std::expected<std::string, branching_compile_error> branching_compiler::emit_llvm(const loader::program_image& image) {
     const auto r = straight_line_compiler::emit_llvm(image);
     return r ? std::expected<std::string, branching_compile_error>{*r} : std::unexpected(branching_compile_error{r.error().message});
-} } // namespace dosrecomp::compiler
+}} // namespace dosrecomp::compiler
