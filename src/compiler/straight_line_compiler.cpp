@@ -297,18 +297,19 @@ straight_line_compiler::extract_exit_code(const loader::program_image& image) {
     translation_state ts;
     ts.state = ts.ssa.entry_state();
     ts.visited_block.assign(graph->blocks.size(), false);
-    ts.registers[static_cast<std::size_t>(decoder::register_name::sp)] = 0xfffe;
+ts.registers[static_cast<std::size_t>(decoder::register_name::sp)] = 0xfffe;
     if (image.format == loader::executable_format::mz) {
-        ts.registers[static_cast<std::size_t>(decoder::register_name::ss)] = image.initial_stack.segment;
+        const auto load_seg = static_cast<std::uint16_t>(0x1000U + image.header_paragraphs);
+        ts.registers[static_cast<std::size_t>(decoder::register_name::ds)] = 0x1000U;
+        ts.registers[static_cast<std::size_t>(decoder::register_name::es)] = 0x1000U;
+        ts.registers[static_cast<std::size_t>(decoder::register_name::ss)] = static_cast<std::uint16_t>(load_seg + image.initial_stack.segment);
         ts.registers[static_cast<std::size_t>(decoder::register_name::sp)] = image.initial_stack.offset;
-    }
-    if (image.format == loader::executable_format::mz) {
-        const auto first_byte = static_cast<std::uint32_t>(image.entry_point.segment) * 16U;
+        const auto first_byte = static_cast<std::uint32_t>(load_seg) * 16U;
         const auto loaded = ts.memory.write(first_byte, std::span<const std::byte>{image.bytes.data(), image.bytes.size()});
         if (!loaded) return std::unexpected(straight_line_compile_error{std::string{"cannot load MZ image into real-mode memory: "} + loaded.error().message});
     } else {
         const auto loaded = ts.memory.write(0x100, std::span<const std::byte>{image.bytes.data(), image.bytes.size()});
-        if (!loaded) return std::unexpected(straight_line_compile_error{std::string{"cannot load COM image into real-mode memory: "} + loaded.error().message});
+        if (!loaded) return std::unexpected(straight_line_compile_error{"cannot load COM image into real-mode memory"});
     }
     return translate_block(image, *graph, 0, ts);
 }
@@ -323,18 +324,19 @@ straight_line_compiler::compile(const loader::program_image& image) {
     translation_state ts;
     ts.state = ts.ssa.entry_state();
     ts.visited_block.assign(graph->blocks.size(), false);
-    ts.registers[static_cast<std::size_t>(decoder::register_name::sp)] = 0xfffe;
+ts.registers[static_cast<std::size_t>(decoder::register_name::sp)] = 0xfffe;
     if (image.format == loader::executable_format::mz) {
-        ts.registers[static_cast<std::size_t>(decoder::register_name::ss)] = image.initial_stack.segment;
+        const auto load_seg = static_cast<std::uint16_t>(0x1000U + image.header_paragraphs);
+        ts.registers[static_cast<std::size_t>(decoder::register_name::ds)] = 0x1000U;
+        ts.registers[static_cast<std::size_t>(decoder::register_name::es)] = 0x1000U;
+        ts.registers[static_cast<std::size_t>(decoder::register_name::ss)] = static_cast<std::uint16_t>(load_seg + image.initial_stack.segment);
         ts.registers[static_cast<std::size_t>(decoder::register_name::sp)] = image.initial_stack.offset;
-    }
-    if (image.format == loader::executable_format::mz) {
-        const auto first_byte = static_cast<std::uint32_t>(image.entry_point.segment) * 16U;
+        const auto first_byte = static_cast<std::uint32_t>(load_seg) * 16U;
         const auto loaded = ts.memory.write(first_byte, std::span<const std::byte>{image.bytes.data(), image.bytes.size()});
         if (!loaded) return std::unexpected(straight_line_compile_error{std::string{"cannot load MZ image into real-mode memory: "} + loaded.error().message});
     } else {
         const auto loaded = ts.memory.write(0x100, std::span<const std::byte>{image.bytes.data(), image.bytes.size()});
-        if (!loaded) return std::unexpected(straight_line_compile_error{std::string{"cannot load COM image into real-mode memory: "} + loaded.error().message});
+        if (!loaded) return std::unexpected(straight_line_compile_error{"cannot load COM image into real-mode memory"});
     }
     const auto exit_code = translate_block(image, *graph, 0, ts);
     if (!exit_code) return std::unexpected(exit_code.error());
@@ -358,7 +360,8 @@ straight_line_compiler::emit_llvm(const loader::program_image& image) {
     registers[static_cast<std::size_t>(decoder::register_name::sp)] = 0xfffe;
     runtime::real_mode_memory memory;
     if (image.format == loader::executable_format::mz) {
-        const auto first_byte = static_cast<std::uint32_t>(image.entry_point.segment) * 16U;
+        const auto load_seg = static_cast<std::uint16_t>(0x1000U + image.header_paragraphs);
+        const auto first_byte = static_cast<std::uint32_t>(load_seg) * 16U;
         const auto loaded = memory.write(first_byte, std::span<const std::byte>{image.bytes.data(), image.bytes.size()});
         if (!loaded) return std::unexpected(straight_line_compile_error{std::string{"cannot load MZ: "} + loaded.error().message});
     } else {

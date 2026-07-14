@@ -22,6 +22,7 @@ namespace dosrecomp::compiler {
 namespace {
 
 constexpr std::size_t dos_memory_size = 0x100000;
+constexpr std::uint16_t mz_load_segment = 0x1000;
 
 constexpr std::size_t word_reg_index(decoder::register_name r) {
     if (r >= decoder::register_name::ax && r <= decoder::register_name::di) {
@@ -431,17 +432,24 @@ void emit_image_array(std::ostream& out, const std::vector<std::byte>& bytes) {
 [[nodiscard]] std::expected<void, branching_compile_error> write_main(std::ostream& out, const loader::program_image& image) {
     out << "int main() {\n  regs[4] = 0xfffe;\n";
     if (image.format == loader::executable_format::mz) {
-        const auto base = static_cast<std::uint32_t>(image.entry_point.segment) * 16U;
-        const auto seg = image.entry_point.segment;
+        const auto psp = static_cast<std::uint32_t>(mz_load_segment);
+        const auto load_seg = static_cast<std::uint16_t>(psp + image.header_paragraphs);
+        const auto base = load_seg * 16U;
+        const auto ss_abs = static_cast<std::uint16_t>(load_seg + image.initial_stack.segment);
+        const auto cs_abs = static_cast<std::uint16_t>(load_seg + image.entry_point.segment);
         emit_image_array(out, image.bytes);
-        out << "  for (size_t i = 0; i < sizeof(img); ++i) mem[" << std::hex << base << " + i] = img[i];\n" << std::dec;
+        out << "  for (size_t i = 0; i < sizeof(img); ++i) mem[0x" << std::hex << base << " + i] = img[i];\n" << std::dec;
         for (const auto& reloc : image.relocations) {
             const auto offset = static_cast<std::uint32_t>(reloc.address.segment) * 16U + reloc.address.offset + base;
-            out << "  { uint16_t cur = (uint16_t)mem[" << std::hex << offset << "] | ((uint16_t)mem["
-                << offset + 1 << "] << 8); cur = (uint16_t)(cur + " << seg << "); mem["
-                << offset << "] = (uint8_t)cur; mem[" << offset + 1 << "] = (uint8_t)(cur >> 8); }\n" << std::dec;
+            out << "  { uint16_t cur = (uint16_t)mem[0x" << std::hex << offset << "] | ((uint16_t)mem[0x"
+                << offset + 1 << "] << 8); cur = (uint16_t)(cur + 0x" << load_seg << "); mem[0x"
+                << offset << "] = (uint8_t)cur; mem[0x" << offset + 1 << "] = (uint8_t)(cur >> 8); }\n" << std::dec;
         }
-        out << "  regs[10] = " << image.initial_stack.segment << "; regs[4] = " << image.initial_stack.offset << ";\n";
+        out << "  regs[16] = 0x" << std::hex << psp << "; ";
+        out << "regs[19] = 0x" << psp << "; ";
+        out << "regs[10] = 0x" << ss_abs << "; ";
+        out << "regs[9] = 0x" << cs_abs << std::dec << "; ";
+        out << "regs[4] = " << image.initial_stack.offset << ";\n";
     } else {
         emit_image_array(out, image.bytes);
         out << "  for (size_t i = 0; i < sizeof(img); ++i) mem[0x100 + i] = img[i];\n";

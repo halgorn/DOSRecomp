@@ -65,6 +65,8 @@ int main() {
     const auto repmovsb_output = root.string() + "-repmovsb.elf";
     const auto prefix_input = root.string() + "-prefix.com";
     const auto prefix_output = root.string() + "-prefix.elf";
+    const auto mz_input = root.string() + "-tiny.exe";
+    const auto mz_output = root.string() + "-tiny.elf";
     {
         std::ofstream file(input, std::ios::binary);
         const std::array<unsigned char, 5> program{0xb8, 0x07, 0x4c, 0xcd, 0x21};
@@ -156,6 +158,33 @@ int main() {
     }
     std::filesystem::remove(prefix_input);
     std::filesystem::remove(prefix_output);
+    {
+        std::ofstream file(mz_input, std::ios::binary);
+        const std::array<unsigned char, 32> header{
+            'M', 'Z', 0x32, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+            0xff, 0xff, 0x00, 0x00, 0xfe, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        file.write(reinterpret_cast<const char*>(header.data()), static_cast<std::streamsize>(header.size()));
+        const std::array<unsigned char, 13> program{
+            0xba, 0x2d, 0x00, 0xb8, 0x00, 0x09, 0xcd, 0x21, 0xb8, 0x00, 0x4c, 0xcd, 0x21};
+        file.write(reinterpret_cast<const char*>(program.data()), static_cast<std::streamsize>(program.size()));
+        file.write("OK\r\n$", 5);
+        file.close();
+        if (!file) return EXIT_FAILURE;
+    }
+    const auto mz_compile_status = run(DOSRECOMP_CLI_PATH, mz_input, mz_output);
+    int mz_status = 255;
+    std::string mz_text;
+    if (mz_compile_status == 0) {
+        const auto capture_path = mz_output + ".captured";
+        const auto cmd = mz_output + " > " + capture_path;
+        mz_status = std::system(cmd.c_str());
+        std::ifstream captured(capture_path, std::ios::binary);
+        mz_text = std::string{std::istreambuf_iterator<char>{captured}, {}};
+        std::filesystem::remove(capture_path);
+    }
+    std::filesystem::remove(mz_input);
+    std::filesystem::remove(mz_output);
     if (compile_status != 0 || output_status != 7 || byte_compile_status != 0 || byte_output_status != 3 ||
         console_compile_status != 0 || console_status == -1 || !WIFEXITED(console_status) || WEXITSTATUS(console_status) != 6 ||
         console_text != "ok\n" ||
@@ -163,6 +192,8 @@ int main() {
         repmovsb_text != "TEST" ||
         prefix_compile_status != 0 || prefix_status == -1 || !WIFEXITED(prefix_status) || WEXITSTATUS(prefix_status) != 0 ||
         prefix_text != "ok\n" ||
+        mz_compile_status != 0 || mz_status == -1 || !WIFEXITED(mz_status) || WEXITSTATUS(mz_status) != 0 ||
+        mz_text != "OK\r\n" ||
         dot_status != 0 || dot_output.rfind("digraph cfg", 0) != 0 || llvm_status != 0 ||
         llvm_output.find("ret i32 7") == std::string::npos || !keepcpp_written) {
         std::cerr << "CLI recompilation integration test failed\n";

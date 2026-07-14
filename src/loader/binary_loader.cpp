@@ -54,6 +54,7 @@ parse_mz(const std::vector<std::byte>& file) {
                   file.begin() + static_cast<std::ptrdiff_t>(declared_size)},
         .entry_point = {initial_cs, initial_ip},
         .initial_stack = {initial_ss, initial_sp},
+        .header_paragraphs = header_paragraphs,
         .relocations = {},
     };
     for (std::size_t index = 0; index < relocation_count; ++index) {

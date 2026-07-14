@@ -36,6 +36,7 @@ struct program_image {
     std::vector<std::byte> bytes;
     segmented_address entry_point{};
     segmented_address initial_stack{};
+    std::uint16_t header_paragraphs{};
     std::vector<relocation> relocations;
 
     /** Returns the entry index relative to @ref bytes, not the DOS logical address. */
